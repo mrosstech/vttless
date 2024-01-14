@@ -1,7 +1,8 @@
 const mongoose = require("mongoose");
-const { User } = require("../models");
-const Customer = mongoose.model("User");
+const { User, Role } = require("../models");
+//const Customer = mongoose.model("User");
 const bcrypt = require("bcryptjs");
+
 
 // Function to register a new user
 exports.signup = async (req, res) => {
@@ -30,9 +31,10 @@ exports.signup = async (req, res) => {
         //         req.body.password = hash;
         //     })
         // })
-
+        var userRole = await Role.findOne({"name": "User"});
+        console.log(userRole);
         const newUser = new User({
-            email, username, password,
+            email, username, password, roles: [userRole._id]
         });
 
         //console.log("User: " + newUser);

@@ -11,7 +11,7 @@ const bcrypt = require("bcryptjs");
 passport.use(new LocalStrategy(async function verify(username, password, cb) {
   console.log('Attempting to authenticate user');
   try {
-    const user = await User.findOne({ username });
+    const user = await User.findOne({ username }).populate('roles');
     if (!user) {
       console.log('Bad username or password.');
       return cb(null, false, {message: 'Incorrect username or password'});
