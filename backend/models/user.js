@@ -22,12 +22,10 @@ UserSchema.pre('save', function (next) {
             if (err) {
                 return next(err);
             }
-            console.log("Salt successfully generated.  Salt: " + salt);
             bcrypt.hash(user.password, salt, function(err, hash) {
                 if (err) {
                     return next(err);
                 }
-                console.log("Hash created.  Hash: " + hash);
                 user.password = hash;
                 next();
             })

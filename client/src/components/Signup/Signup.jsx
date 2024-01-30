@@ -20,24 +20,22 @@ const Signup = () => {
     }
     return (
         <div className="login">
-            <div className="wrapper">
-                <div className="right">
-                    <h1 className="loginTitle">Sign Up</h1>
-                    <form onSubmit={handleSignupFormSubmit}>
-                        <div>
-                            <input id="username" name="accountname" type="text" />
+            <div className="loginDiv">
+                <div className="loginTitle"><p className="text-center">Sign Up</p></div>
+                    <form className="loginForm" onSubmit={handleSignupFormSubmit}>
+                        <div className="centeredDiv">
+                            <input className="loginInput" id="username" name="accountname" type="text" placeholder="Username" />
                         </div>
-                        <div>
-                            <input id="email" name="email" type="email" />
+                        <div className="centeredDiv">
+                            <input className="loginInput" id="email" name="email" type="email" placeholder="E-mail address"/>
                         </div>
-                        <div>
-                            <input id="password" name="password" type="password" />
+                        <div className="centeredDiv">
+                            <input className="loginInput" id="password" name="password" type="password" placeholder="Password" />
                         </div>
-                        <div>
-                            <button className="submit" type="submit">Signup</button>
+                        <div className="centeredDiv">
+                            <button className="standardButton" type="submit">Signup</button>
                         </div>
                     </form>
-                </div>
             </div>
         </div>
     );
