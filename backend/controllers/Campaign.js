@@ -12,7 +12,6 @@ exports.list = async (req, res, next) => {
         console.log(err);
         res.send({error: "Error getting campaigns"});
     }
-    //res.send({message: "campaign lists not implemented"});
 }
 
 exports.add = async (req, res, next) => {
@@ -30,13 +29,46 @@ exports.add = async (req, res, next) => {
         console.log(err);
         res.send({error: "Error adding new campaign"});
     }
-    //res.send({message: "add a new campaign not implemented"});
 }
 
 exports.delete = async (req, res, next) => {
-    res.send({message: "delete campaign not implemented"});
+    try{
+        const { user } = req;
+        const {campaignId} = req.body;
+        const deleteResult = await Campaign.deleteOne({$and: [{"_id": campaignId}, {"gm": user._id}]});
+        if (deleteResult.deletedCount > 0) {
+            console.log("Campaign deleted!");
+            res.status(201).send({message: "Campaign deleted successfully"});
+        } else {
+            console.log("Campaign not found");
+            res.status(400).send({error: "Campaign not found"});
+        }
+    } catch (err) {
+        console.log("Error deleting campaign");
+        res.status(500).send({ error: "Server error deleting campaign"});
+    }
 }
 
 exports.update = async (req, res, next) => {
-    res.send({message: "update campaign not implemented"});
+    try {
+        const {user} = req;
+        const {name, description, players, gm, id} = req.body;
+        updateResult = await Campaign.updateOne(
+            { $and: [{_id: id}, {gm: user._id}]},
+            {
+                $set: { name: name, description: description, players: players, gm: gm},
+                $currentDate: { lastModified: true}
+            }
+        );
+        if (updateResult.matchedCount == 1 && updateResult.modifiedCount == 1) {
+            console.log("Campaign updated successfully");
+            res.status(201).send({message: "Campaign updated successfully"});
+        } else {
+            console.log("No campaign to update");
+            res.status(400).send({message: "No campaign to update"});
+        }
+    } catch (err) {
+        console.log("Error updating campaign");
+        res.status(500).send({ error: "Server error updating campaign"});
+    }
 }

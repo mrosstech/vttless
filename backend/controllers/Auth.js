@@ -17,9 +17,10 @@ exports.login = async (req, res, next) => {
         expires: Date.now() + parseInt(process.env.JWT_EXPIRATION_MS),
       };
   
-      req.login(payload, {session: false}, (error) => {
-        if (error) {
-          res.status(400).send({ error });
+      req.login(payload, {session: false}, (err) => {
+        if (err) {
+          console.log("Error with user login: " + err);
+          res.status(400).send({ error: "Server error logging in"});
         }
   
         const token = jwt.sign(JSON.stringify(payload), process.env.JWT_SECRET_KEY);
