@@ -32,14 +32,11 @@ exports.login = async (req, res, next) => {
 exports.validate = async (req, res, next) => {
     try {  
       console.log("Validated!");
-      const { cookies } = req;
-      
-      console.log(req.user);
+      const { user } = req;
       res.status(200).send({ username: user.username,
                               email: user.email,
                               roles: user.roles
                           });
-    
     }
     catch (err) {
         console.log(err);

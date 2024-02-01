@@ -6,6 +6,7 @@ const JWTStrategy = require("passport-jwt").Strategy;
 //const router = express.Router();
 const User = require('./models/user');
 const bcrypt = require("bcryptjs");
+const jwtOptions = {};
 
 const cookieExtractor = function(req) {
   let token = null;
@@ -50,15 +51,15 @@ passport.use(new LocalStrategy(async function verify(username, password, cb) {
   } 
 }))
 
-passport.use(new JWTStrategy({
-    jwtFromRequest: cookieExtractor,
-    secretOrKey: process.env.JWT_SECRET_KEY,
-  }, (jwtPayload, done) => {
-    console.log("Payload Username: " + jwtPayload.username);
+jwtOptions.jwtFromRequest = cookieExtractor;
+jwtOptions.secretOrKey = process.env.JWT_SECRET_KEY;
+
+passport.use(new JWTStrategy(jwtOptions, (jwtPayload, done) => {
+    //console.log("Payload Username: " + jwtPayload.username);
     User.findOne({username: jwtPayload.username})
     .then(user => {
-        console.log(user);
-        console.log(jwtPayload);
+        //console.log(user);
+        //console.log(jwtPayload);
         if(user) {
             return done(null, user);
         }
