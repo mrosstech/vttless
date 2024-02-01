@@ -1,11 +1,53 @@
-import {React, useEffect} from 'react';
-
+import {React, useEffect, useState} from 'react';
+import axios from 'axios';
 
 const Home = ({user}) => {
+  const [campaigns, setCampaigns] = useState(null);
+  const [error, setError] = useState(null);
+
+  const API = axios.create({
+    baseURL: process.env.REACT_APP_BACKEND_BASE_URL,
+    headers: {
+        'Content-Type': 'application/json'
+    },
+    withCredentials: true,
+  });
+
   useEffect(() => {
     // Get the users campaigns
-    console.log("Using effect");
-  }, []);
+    //console.log(user);
+    if (user) {
+      try {
+        const res =  API.get("/campaigns/list", {
+        }).then((res) => {
+            let listCampaigns = "";
+            console.log("Got campaign data back");
+            if (res?.data.campaigns) {
+                console.log(res.data.campaigns);
+                if (res.data.campaigns.length == 0) {
+                  listCampaigns = "<li>No campaigns<li>";
+                } else {
+                  listCampaigns = res.data.campaigns.map(campaign => 
+                      <tr key={campaign._id}><td>{campaign.name}</td><td>{campaign.description}</td><td>Edit</td></tr>
+                    );
+                }
+                setCampaigns(listCampaigns);
+            } else {
+                console.log("incorrect submission");
+                setError(res.message);
+            }
+        });
+      } catch (err) {
+          if (!err?.response) {
+              setError("no server responded");
+          } else {
+              setError("user not logged in");
+          }
+      }
+    } else {
+      console.log("no user logged in");
+    }
+  }, [user]);
 
   return (
     <div>
@@ -17,9 +59,9 @@ const Home = ({user}) => {
           <h1>Stuff you should only see if you ARE logged in.</h1>
           <div>
             <div>My Campaigns</div>
-            <ul>
-              
-            </ul>
+            <table>
+              {campaigns}
+            </table>
           </div>
         </div>
       

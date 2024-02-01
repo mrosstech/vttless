@@ -15,6 +15,7 @@ const App = () => {
   // Create a variable that can be used to set the presence of a user to true or false.
   // Not sure what this impacts right now.
   const [user, setUser] = useState(null);
+  const [error, setError] = useState(null);
   //const backendURL = process.env.REACT_APP_BACKEND_BASE_URL;
  
   const API = axios.create({
@@ -34,9 +35,9 @@ const App = () => {
         const res =  API.get("/auth/validate", {
         }).then((res) => {
             console.log(res);
-            if (res?.data.user.username) {
-                const role = res?.data.user.roles[0].name;
-                setUser({username: res?.data.user.username, role: role, token: res?.data.token });
+            if (res?.data.username) {
+                const role = res?.data.roles[0].name;
+                setUser({username: res?.data.username, role: role});
             } else {
                 console.log("incorrect submission");
                 setError(res.message);

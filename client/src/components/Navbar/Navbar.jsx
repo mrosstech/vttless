@@ -13,15 +13,12 @@ const Navbar = ({user}) => {
                 user ? (
             
             <ul className="navbarLinks">
-                <input type="checkbox" id="checkbox_toggle" />
-                <label for="checkbox_toggle" className="hamburger">&#9776</label>
-
                 <div className="menu">
-                    <li className="block py-2 px-3 text-white">
+                    <li className="menuList">
                         <img src={vttlessicon} alt="" className="avatarImage" />
                     </li>
-                    <li className="block py-2 px-3 text-white">{user.username}</li>
-                    <li className="block py-2 px-3 text-white"><Link className="menuLink" to="logout">Logout</Link></li>
+                    <li className="menuList">{user.username}</li>
+                    <li className="menuList"><Link className="menuLink" to="logout">Logout</Link></li>
                 </div>
             </ul>
         ) : (<ul className="navbarLinks">

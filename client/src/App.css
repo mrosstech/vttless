@@ -126,8 +126,13 @@
     font-size: 1em;
     margin: 0;
     position: relative;
-    top: 50%;
-    transform: translateY(-50%);
+
+
+}
+
+.menuList {
+    text-align: center;
+    margin: auto;
 }
 
 .loginDiv {
@@ -188,6 +193,12 @@ p.text-center {
     align-items: center;
     justify-content: center;
 }
+
+.avatarImage {
+    height: 40px;
+    padding-right: 10px;
+}
+
 @media (prefers-color-scheme: dark) {
     .navbarBase {
         background-color: #111827;
