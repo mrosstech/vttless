@@ -1,6 +1,4 @@
-const mongoose = require("mongoose");
 const { User, Role } = require("../models");
-const bcrypt = require("bcryptjs");
 
 
 // Function to register a new user
@@ -36,4 +34,5 @@ exports.signup = async (req, res) => {
         res.status(500).json({message: "Internal server error"});
     }
 };
+
 

@@ -29,6 +29,8 @@ app.use("/users", userRoute);
 const campaignsRoute = require("./routes/campaigns");
 app.use("/campaigns", campaignsRoute);
 
+const friendsRoute = require("./routes/friends");
+app.use("/friends", friendsRoute);
 
 
 app.listen(serverPort, ()=>{

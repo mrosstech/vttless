@@ -1,10 +1,9 @@
 const { Campaign } = require('../models');
-const passport = require('passport');
 
 exports.list = async (req, res, next) => {
     try {
         const { user } = req;
-        console.log(user);
+        //console.log(user);
         const campaigns = await Campaign.find({ $or: [ {"gm": user._id}, {"players": { $elemMatch: { $eq: user._id }}} ] } );
         res.send({campaigns: campaigns});
         next;
@@ -18,7 +17,7 @@ exports.add = async (req, res, next) => {
     try {
         const {name, description, players, gm} = req.body;
         const { user } = req;
-        console.log(user);
+        //console.log(user);
         const newCampaign = new Campaign({
             name, description, players, gm
         });

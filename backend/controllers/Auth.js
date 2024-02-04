@@ -46,6 +46,7 @@ exports.validate = async (req, res, next) => {
 };
 
 exports.logout = async (req, res, next) => {
+    console.log("User logged out");
     res.status(202).clearCookie('vttless-jwt').send({message: "Cookie cleared"});
 }
   

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import vttlessicon from "../../assets/vttless_orange.jpg";
+import vttlessicon from "../assets/vttless_orange.jpg";
 
 const Navbar = ({user}) => {
     return (

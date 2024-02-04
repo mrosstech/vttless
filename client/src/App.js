@@ -1,15 +1,18 @@
 import { BrowserRouter, Route, Routes, Navigate } from 'react-router-dom';
 import { useEffect, useState } from "react";
-import MapDisplay from './components/MapDisplay/MapDisplay';
-import Home from './components/Home/Home';
-import Login from "./components/Login/Login";
-import Logout from "./components/Logout/Logout";
-import Navbar from "./components/Navbar/Navbar";
-import Signup from "./components/Signup/Signup";
+import MapDisplay from './components/MapDisplay.jsx';
+import Home from './components/Home.jsx';
+import Login from "./components/Login.jsx";
+import Logout from "./components/Logout.jsx";
+import Navbar from "./components/Navbar.jsx";
+import Signup from "./components/Signup.jsx";
+import Friends from "./components/Friends";
 import { AuthProvider } from "./hooks/auth";
 import { CookiesProvider, useCookies } from 'react-cookie';
+import {ChakraProvider} from '@chakra-ui/react';
 import axios from "axios";
 import "./App.css";
+import theme from "./theme.js";
 
 const App = () => {
   // Create a variable that can be used to set the presence of a user to true or false.
@@ -34,7 +37,7 @@ const App = () => {
       try {
         const res =  API.get("/auth/validate", {
         }).then((res) => {
-            console.log(res);
+            console.log('No user logged in, checking for jwt');
             if (res?.data.username) {
                 const role = res?.data.roles[0].name;
                 setUser({username: res?.data.username, role: role});
@@ -42,7 +45,9 @@ const App = () => {
                 console.log("incorrect submission");
                 setError(res.message);
             }
-        });
+        }).catch((err) => {
+          // Do nothing because there was no valid jwt
+        } );
       } catch (err) {
           if (!err?.response) {
               setError("no server responded");
@@ -57,21 +62,24 @@ const App = () => {
   }, []);
 
   return (
-    <BrowserRouter>
-      <div>
-        <Navbar user={user} />
-        <Routes>
-          <Route path="/" element={<Home user={user} />} />
-          <Route path="/login"
-            element={user ? <Navigate to="/" /> : <Login setUser={setUser} />}
-          />
-          <Route path="/logout"
-            element={user ? <Logout setUser={setUser} /> : <Navigate to="/" /> }
-          />
-          <Route path="/signup" element={user ? <Navigate to="/" /> : <Signup />} />
-        </Routes>
-      </div>
-    </BrowserRouter>
+    <ChakraProvider theme={theme}>
+      <BrowserRouter>
+        <div>
+          <Navbar user={user} />
+          <Routes>
+            <Route path="/" element={<Home user={user} />} />
+            <Route path="/login"
+              element={user ? <Navigate to="/" /> : <Login setUser={setUser} />}
+            />
+            <Route path="/logout"
+              element={user ? <Logout setUser={setUser} /> : <Navigate to="/" /> }
+            />
+            <Route path="/signup" element={user ? <Navigate to="/" /> : <Signup />} />
+            <Route path="/friends" element={user ? <Friends user={user}/> : <Login />} />
+          </Routes>
+        </div>
+      </BrowserRouter>
+    </ChakraProvider>
     
   );
 }
