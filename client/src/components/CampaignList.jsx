@@ -76,7 +76,7 @@ const CampaignList = ({user}) => {
       return (
         <div>
             <TableContainer>
-                <Table variant='simple' colorScheme="pink">
+                <Table variant='simple' colorScheme="orange">
                     <TableCaption>My Campaigns</TableCaption>
                     <Thead>
                         <Tr>
