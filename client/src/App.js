@@ -9,10 +9,13 @@ import Signup from "./components/Signup.jsx";
 import Friends from "./components/Friends";
 import { AuthProvider } from "./hooks/auth";
 import { CookiesProvider, useCookies } from 'react-cookie';
-import {ChakraProvider} from '@chakra-ui/react';
+import {extendTheme, ChakraProvider} from '@chakra-ui/react';
 import axios from "axios";
 import "./App.css";
 import theme from "./theme.js";
+
+
+//const theme = extendTheme({colors});
 
 const App = () => {
   // Create a variable that can be used to set the presence of a user to true or false.

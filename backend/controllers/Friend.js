@@ -3,7 +3,7 @@ const { Friend, User } = require('../models');
 
 exports.add = async (req, res, next) => {
     try {
-        const {email, username} = req.body;
+        const { email } = req.body;
         const { user } = req;
         let targetUser = null;
 
@@ -12,10 +12,6 @@ exports.add = async (req, res, next) => {
             // Lookup by e-mail
             console.log("Looking up by e-mail: " + email);
             targetUser = await User.findOne({email: email});
-        }
-        if (username != null) {
-            console.log("Looking up by username: " + username);
-            targetUser = await User.findOne({username: username});
         }
         console.log("Target user returned: ");
         console.log(targetUser);
