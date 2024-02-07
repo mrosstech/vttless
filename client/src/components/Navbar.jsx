@@ -77,9 +77,9 @@ const MenuToggle = ({ toggle, isOpen }) => {
           pt={[4, 4, 0, 0]}
         >
           <MenuItem to="/">Home</MenuItem>
-          <MenuItem to="/Campaigns">Campaigns</MenuItem>
-          <MenuItem to="/faetures">Friends</MenuItem>
-          <MenuItem to="/signup" isLast>
+          <MenuItem to="/campaigns">Campaigns</MenuItem>
+          <MenuItem to="/friends">Friends</MenuItem>
+          <MenuItem to="/profile" isLast>
             <Button
               size="sm"
               rounded="md"

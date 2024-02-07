@@ -1,3 +1,5 @@
+import {Wrap} from '@chakra-ui/react';
+import {Chip} from './Chip';
 /**
  * A horizontal stack of chips. Like a Pringles can on its side.
  */

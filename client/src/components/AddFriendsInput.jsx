@@ -1,3 +1,7 @@
+import {useState} from 'react';
+import {ChipList} from './ChipList';
+import {ChipEmailInput} from './ChipEmailInput';
+
 export const AddFriendsInput = ({ initialEmails = []}) => {
     const EMAIL_REGEXP = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     const isValidEmail = (email) => EMAIL_REGEXP.test(email);
@@ -19,6 +23,53 @@ export const AddFriendsInput = ({ initialEmails = []}) => {
         setEmails(newEmails);
         setInputValue("");
     };
-    
 
+    const removeEmail = (email) => {
+        const index = emails.findIndex((e) => e === email);
+        if (index !== -1) {
+            const newEmails = [...emails];
+            newEmails.splice(index, 1);
+            setEmails(newEmails);
+        }
+    };
+
+    const handleChange = (e) => {
+        setInputValue(e.target.value);
+    };
+
+    const handleKeyDown = (e) => {
+        if (["Enter", "Tab", ","].includes(e.key)) {
+            e.preventDefault();
+            addEmails([inputValue])
+        }
+    };
+
+    const handlePaste = (e) => {
+        e.preventDefault();
+
+        const pastedData = e.clipboardData.getData("text");
+        const pastedEmails = pastedData.split(",");
+        addEmails(pastedEmails);
+    };
+
+    const handleCloseClick = (email) => {
+        removeEmail(email);
+    }
+
+    return (
+        <>
+            <ChipList emails={emails} onCloseClick={handleCloseClick} />
+
+            <ChipEmailInput
+                placeholder="enter emails"
+                onPaste={handlePaste}
+                onKeyDown={handleKeyDown}
+                onChange={handleChange}
+                value={inputValue}
+            />
+
+        </>
+    )
 }
+
+export default AddFriendsInput;

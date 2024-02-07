@@ -1,4 +1,4 @@
-
+import {Tag, TagLabel, TagCloseButton} from '@chakra-ui/react';
 /**
  * Represents an email added to the list. Highlighted with a close button for removal.
  */
