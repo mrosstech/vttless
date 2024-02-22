@@ -1,6 +1,8 @@
 import {useState} from 'react';
 import {ChipList} from './ChipList';
 import {ChipEmailInput} from './ChipEmailInput';
+import {Button} from '@chakra-ui/react';
+import DataService from '../providers/DataService';
 
 export const AddFriendsInput = ({ initialEmails = []}) => {
     const EMAIL_REGEXP = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -56,10 +58,13 @@ export const AddFriendsInput = ({ initialEmails = []}) => {
         removeEmail(email);
     }
 
+    const handleEmailClick = () => {
+        console.log(emails);
+        DataService.addFriendEmails(emails);
+    }
+
     return (
         <>
-            <ChipList emails={emails} onCloseClick={handleCloseClick} />
-
             <ChipEmailInput
                 placeholder="enter emails"
                 onPaste={handlePaste}
@@ -67,7 +72,8 @@ export const AddFriendsInput = ({ initialEmails = []}) => {
                 onChange={handleChange}
                 value={inputValue}
             />
-
+            <ChipList emails={emails} onCloseClick={handleCloseClick} />
+            <Button onClick={handleEmailClick}>Add Emails</Button>
         </>
     )
 }

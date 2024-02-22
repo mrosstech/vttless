@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import vttlessicon from "../assets/vttless_orange.jpg";
-import { Image, Box, Text } from "@chakra-ui/react";
+import { Image, Box } from "@chakra-ui/react";
 
 export default function Logo(props) {
     return (

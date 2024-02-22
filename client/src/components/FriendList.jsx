@@ -4,13 +4,11 @@ import {
     Table,
     Thead,
     Tbody,
-    Tfoot,
     Tr,
     Th,
     Td,
     TableCaption,
     TableContainer,
-    useDisclosure
   } from '@chakra-ui/react'
 //import CampaignEdit from './CampaignEdit';
 
@@ -46,7 +44,7 @@ const FriendList = ({user}) => {
                 console.log("Got friends data back");
                 if (res?.data.friends) {
                     console.log(res.data.friends);
-                    if (res.data.friends.length == 0) {
+                    if (res.data.friends.length === 0) {
                       listFriends = <Tr><Td>No Friends</Td><Td>Click here to add one!</Td></Tr>;
                     } else {
                         listFriends = res.data.friends.map(friend => 
@@ -75,7 +73,7 @@ const FriendList = ({user}) => {
         } else {
           console.log("no user logged in");
         }
-      }, [friends]);
+      }, [friends, API, user]);
 
       return (
         <div>

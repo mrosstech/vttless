@@ -1,7 +1,6 @@
 
 
 const Signup = () => {
-    const backendUrlLogin = process.env.REACT_APP_BACKEND_BASE_URL + "/auth/login";
     const backendUrlSignup = process.env.REACT_APP_BACKEND_BASE_URL + "/users/signup";
     function handleSignupFormSubmit(event) {
         event.preventDefault();

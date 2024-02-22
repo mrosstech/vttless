@@ -1,23 +1,29 @@
 import React from "react";
 import {useState} from "react";
-import { Link, Box, Flex, Text, Button, Stack } from "@chakra-ui/react";
-
+import { Link, Box, Flex, Text, Button, Stack, Avatar } from "@chakra-ui/react";
 import Logo from "./Logo";
+import {useAuth} from '../providers/AuthProvider';
+import {Outlet} from 'react-router-dom';
 
 const NavBar = (props) => {
+
     const [isOpen, setIsOpen] = useState(false);
 
     const toggle = () => setIsOpen(!isOpen);
-
+    console.log("Navbar:");
+    console.log(props.user);
     return (
+      <>
         <NavBarContainer {...props}>
             <Logo 
                 w="100px" 
                 color={["white", "white", "primary.500", "primary.500"]}
             />
             <MenuToggle toggle={toggle} isOpen={isOpen} />
-            <MenuLinks isOpen={isOpen} />
+            <MenuLinks isOpen={isOpen} user={props.user} isLoggedIn={props.isLoggedIn}/>
         </NavBarContainer>
+        <Outlet />
+      </>
     );
 
 };
@@ -56,7 +62,7 @@ const MenuToggle = ({ toggle, isOpen }) => {
   const MenuItem = ({ children, isLast, to = "/", ...rest }) => {
     return (
       <Link href={to}>
-        <Text display="block" {...rest}>
+        <Text as="span" display="block" {...rest}>
           {children}
         </Text>
       </Link>
@@ -64,6 +70,7 @@ const MenuToggle = ({ toggle, isOpen }) => {
   };
   
   const MenuLinks = ({ isOpen }) => {
+    const {user} = useAuth();
     return (
       <Box
         display={{ base: isOpen ? "block" : "none", md: "block" }}
@@ -79,19 +86,28 @@ const MenuToggle = ({ toggle, isOpen }) => {
           <MenuItem to="/">Home</MenuItem>
           <MenuItem to="/campaigns">Campaigns</MenuItem>
           <MenuItem to="/friends">Friends</MenuItem>
-          <MenuItem to="/profile" isLast>
-            <Button
-              size="sm"
-              rounded="md"
-              color={"orange.100"}
-              bg={"orange.500"}
-              _hover={{
-                bg: ["primary.100", "primary.100", "primary.600", "primary.600"]
-              }}
-            >
-              Login
-            </Button>
-          </MenuItem>
+          { user ? 
+              <>
+              <MenuItem to="/logout">Logout</MenuItem>     
+              <MenuItem to="/profile" isLast>
+                <Avatar name={user.user.username} src={user.user.profilePicture} />{user.user.username}
+              </MenuItem>
+              </>
+          : 
+              <MenuItem to="/login" isLast>
+                <Button
+                  size="sm"
+                  rounded="md"
+                  color={"orange.100"}
+                  bg={"orange.500"}
+                  _hover={{
+                    bg: ["primary.100", "primary.100", "primary.600", "primary.600"]
+                  }}
+                >
+                  Login
+                </Button>
+            </MenuItem>
+          }
         </Stack>
       </Box>
     );
