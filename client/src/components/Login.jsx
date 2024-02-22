@@ -1,87 +1,188 @@
-import { Link } from "react-router-dom";
 import { useState } from "react";
-//import { useNavigate, useContext, useLocation } from "react";
-//import useAuth from "../../hooks/auth";
-import axios from "axios";
-import Cookies from 'js-cookie';
+import { useForm } from 'react-hook-form';
+import { useNavigate, Link } from 'react-router-dom';
+import AuthService from '../providers/AuthService';
+import {useAuth} from '../providers/AuthProvider';
+import Logo from './Logo';
+import {OAuthButtonGroup} from './OAuthButtonGroup';
+import {PasswordField} from './PasswordField';
+import { useToast } from '@chakra-ui/react';
+import { HiEye, HiEyeOff } from 'react-icons/hi';
+import {
+    Box,
+    Button,
+    Checkbox,
+    Container,
+    Divider,
+    FormControl,
+    FormLabel,
+    FormErrorMessage,
+    Heading,
+    HStack,
+    Input,
+    Stack,
+    Text,
+    Center,
+    InputGroup,
+    InputRightElement,
+    IconButton
+  } from '@chakra-ui/react'
 
-const Login = ({setUser}) => {
+const Login = () => {
+    const navigate = useNavigate();
+    const {user, setUser} = useAuth();
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
-    //console.log("Creating axios API connection");
-    const API = axios.create({
-        baseURL: process.env.REACT_APP_BACKEND_BASE_URL,
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        withCredentials: true,
-    });
+    const toast = useToast();
 
-    const handleUsernameChange = (event) => {
-        setUsername(event.target.value);
+    const {
+        register,
+        handleSubmit,
+        formState: {errors, isSubmitting}
+    } = useForm();
+
+    function onSubmit(values) {
+        console.log("Handling submit for login form");
+        return new Promise((resolve) => {
+            setTimeout(() => {
+                alert(JSON.stringify(values, null, 2));
+                resolve();
+            }, 3000);
+        });
     }
 
-    const handlePasswordChange = (event) => {
-        setPassword(event.target.value);
+    // const handleUsernameChange = (event) => {
+    //     setUsername(event.target.value);
+    // }
+
+    // const handlePasswordChange = (event) => {
+    //     setPassword(event.target.value);
+    // }
+    
+    const showErrorToast = () => {
+        
+        toast({
+            title: 'Login Failed',
+            description: 'Bad Username or Password',
+            status: 'error',
+            duration: 5000,
+            isClosable: true
+        });
     }
 
-    const handleLoginFormSubmit =  (event, err) => {
-        //console.log("Event: " + event.data);
-        if (err) {
-            console.log("Error in handling form submit: " + err);
-        }
-        //console.log("Handling form submit event...");
-        event.preventDefault();
-        //console.log("Endpoint address: " + process.env.REACT_APP_BACKEND_BASE_URL);
-        try {
-            const res =  API.post("/auth/login", {
-                username,
-                password,
-            }).then((res) => {
-                console.log(res);
-                if (res?.data.user.username) {
-                    const role = res?.data.user.roles[0].name;
-                    setUser({username: res?.data.user.username, role: role, token: res?.data.token });
-                    //Cookies.set('vttless-token', res?.data.token, { expires: 7, secure: true});
-                    setUsername("");
-                    setPassword("");
-                } else {
-                    console.log("incorrect submission");
-                    setError(res.message);
-                }
-            });
-        } catch (err) {
-            if (!err?.response) {
-                setError("no server responded");
-            } else {
-                setError("user signin failed");
-            }
-        }
+    const handleLoginFormSubmit =  (values) => {
+        // if (err) {
+        //     console.log("Error in handling form submit: " + err);
+        // }
+        //event.preventDefault();
+
+        AuthService.login(values.username, values.password).then((res) => {
+            console.log("Login response: ");
+            console.log(res)
+            setUser(res);
+            console.log("User set to: ");
+            console.log(user);
+            navigate('/');
+        }).catch( (err) => {
+            showErrorToast();
+        });
     };
 
     return (
-        <div className="login">
-            <div className="loginDiv">
-                <div className="loginTitle"><p className="text-center">Get In Here! The game is starting!</p></div>
-                <div>
-                    <form className="loginForm" onSubmit={handleLoginFormSubmit}>
-                        <div className="centeredDiv">
-                            <input className="loginInput" id="username" name="username" type="text" onChange={handleUsernameChange} />
-                        </div>
-                        <div className="centeredDiv">
-                            <input className="loginInput" id="password" name="password" type="password" onChange={handlePasswordChange} />
-                        </div>
-                        <div className="centeredDiv">
-                            <button className="standardButton" type="submit">Enter the Realm</button>
-                        </div>
-                        <div>
-                            <Link className="link" to="/signup">Don't have an account?  Sign up here.</Link>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
+        <form onSubmit={handleSubmit(handleLoginFormSubmit)}>
+            <Container maxW="lg" py={{ base: '12', md: '24' }} px={{ base: '0', sm: '8' }}>
+                <Stack spacing="8">
+                <Stack spacing="6">
+                    <Center><Logo /></Center>
+                    <Stack spacing={{ base: '2', md: '3' }} textAlign="center">
+                    <Heading size={{ base: 'xs', md: 'sm' }}>Log in to your account</Heading>
+                    <Text color="fg.muted">
+                        Don't have an account? <Link to="/signup">Sign up</Link>
+                    </Text>
+                    </Stack>
+                </Stack>
+                <Box
+                    py={{ base: '0', sm: '8' }}
+                    px={{ base: '4', sm: '10' }}
+                    bg={{ base: 'transparent', sm: 'bg.surface' }}
+                    boxShadow={{ base: 'none', sm: 'md' }}
+                    borderRadius={{ base: 'none', sm: 'xl' }}
+                >
+                    <Stack spacing="6">
+                    <Stack spacing="5">
+                        <FormControl isInvalid={errors.username}>
+                            <FormLabel htmlFor="text">Username</FormLabel>
+                            <Input 
+                                //id="username" 
+                                type="text" 
+                                placeholder="Username"
+                                {...register('username', {
+                                    required: 'This is required',
+                                    minLength: { value: 3, message: 'Minimum length should be 3'}
+                                })}
+                            />
+                            <FormErrorMessage> {errors.username && errors.username.message} </FormErrorMessage>
+                        </FormControl>
+                        <FormControl isInvalid={errors.password}>
+                            <FormLabel htmlFor="password">Password</FormLabel>
+                            <Input
+                                //id="password"
+                                name="password"
+                                type="password"
+                                autoComplete="current-password"
+                                {...register('password', {
+                                    required: 'This is required',
+                                    minLength: { value: 3, message: 'Minimum length should be 3'}
+                                })}
+                            />
+                            <FormErrorMessage>{errors.password && errors.password.message}</FormErrorMessage>
+                        </FormControl>
+                        
+                    </Stack>
+                    <HStack justify="space-between">
+                        <Checkbox defaultChecked>Remember me</Checkbox>
+                        <Button variant="text" size="sm">
+                        Forgot password?
+                        </Button>
+                    </HStack>
+                    <Stack spacing="6">
+                        <Button isLoading={isSubmitting} type='submit'>Sign in</Button>
+                        <HStack>
+                        <Divider />
+                        <Text textStyle="sm" whiteSpace="nowrap" color="fg.muted">
+                            or continue with
+                        </Text>
+                        <Divider />
+                        </HStack>
+                        <OAuthButtonGroup />
+                    </Stack>
+                    </Stack>
+                </Box>
+                </Stack>
+            </Container>
+        </form>
+        // <div className="login">
+        //     <div className="loginDiv">
+        //         <div className="loginTitle"><p className="text-center">Get In Here! The game is starting!</p></div>
+        //         <div>
+        //             <form className="loginForm" onSubmit={handleLoginFormSubmit}>
+        //                 <div className="centeredDiv">
+        //                     <input className="loginInput" id="username" name="username" type="text" onChange={handleUsernameChange} />
+        //                 </div>
+        //                 <div className="centeredDiv">
+        //                     <input className="loginInput" id="password" name="password" type="password" onChange={handlePasswordChange} />
+        //                 </div>
+        //                 <div className="centeredDiv">
+        //                     <button className="standardButton" type="submit">Enter the Realm</button>
+        //                 </div>
+        //                 <div>
+        //                     <Link className="link" to="/signup">Don't have an account?  Sign up here.</Link>
+        //                 </div>
+        //             </form>
+        //         </div>
+        //     </div>
+        // </div>
     );
 };
 
