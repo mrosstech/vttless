@@ -1,33 +1,54 @@
-const { Friend, User } = require('../models');
+const { Friend, User, ExternalFriend } = require('../models');
 
 
 exports.add = async (req, res, next) => {
     try {
-        const { email } = req.body;
+        const { emails } = req.body;
         const { user } = req;
         let targetUser = null;
-
+        console.log('Adding user, got from body: ');
+        console.log(req.body);
         // Lookup the email or the username based on what's provided
-        if (email != null) {
-            // Lookup by e-mail
-            console.log("Looking up by e-mail: " + email);
-            targetUser = await User.findOne({email: email});
+        console.log(typeof emails);
+        if (emails && typeof emails == 'object') {
+            // Iterate through emails provided.
+            emails.forEach(async (email) => {
+                // Lookup by e-mail
+                console.log("Looking up by e-mail: " + email);
+                targetUser = await User.findOne({email: email});
+
+                console.log("Target user returned: ");
+                console.log(targetUser);
+                if (targetUser == null) {
+                    // No username or e-mail found.
+                    // Add an external friend entry
+                    console.log("No user found with this email or username");
+                    
+                    const newFriend = new Friend({
+                        requestor: user._id,
+                        confirmed: false,
+                        external: true,
+                        email: email
+                    });
+                    console.log("Saving external friend");
+                    // TODO: Add logic to send e-mail to unknown users to ask them to join.
+                    
+                    console.log("Sending e-mail for user to join");
+                    await newFriend.save();
+                    return;
+                }
+                const newFriend = new Friend({
+                    requestor: user._id, 
+                    requestee: targetUser._id, 
+                    confirmed: false,
+                    external: false
+                });
+                console.log("Saving new friend request!");
+                await newFriend.save();
+            });
+            res.status(201).send({message: "Friend request submitted successfully!"});
         }
-        console.log("Target user returned: ");
-        console.log(targetUser);
-        if (targetUser == null) {
-            // No username or e-mail found.
-            // TODO: Add logic to send e-mail to unknown users to ask them to join.
-            console.log("No user found with this email or username");
-            res.status(200).send({message: "Friend request submitted successfully"});
-            return;
-        }
-        const newFriend = new Friend({
-            requestor: user._id, requestee: targetUser._id, confirmed: false
-        });
-        console.log("Saving new friend request!");
-        await newFriend.save();
-        res.status(201).send({message: "Friend request submitted successfully!"});
+        
     } catch (err) {
         console.log(err);
         res.status(500).send({error: "Error adding new friend request"});

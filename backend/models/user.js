@@ -10,7 +10,8 @@ const UserSchema = new mongoose.Schema({
             type: mongoose.Schema.Types.ObjectId,
             ref: "Role"
         }
-    ]
+    ],
+    profilePicture: { type: String, required: false }
     
 });
 

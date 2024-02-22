@@ -1,4 +1,4 @@
-const { User, Role } = require("../models");
+const { User, Role, Friend } = require("../models");
 
 
 // Function to register a new user
@@ -26,6 +26,15 @@ exports.signup = async (req, res) => {
         await newUser.save().catch(function(err) {
             console.log(err);
         });
+
+        // Check to see if the new user has an e-mail address associated with any
+        // external friend requests
+        const friendRequests = Friend.find({email: newUser.email});
+        if (friendRequests && typeof friendRequests == Object) {
+            (await friendRequests).forEach((friendRequest) => {
+                
+            });
+        }
 
         res.status(201).json({ message: "User registered successfully ", user: newUser });
 

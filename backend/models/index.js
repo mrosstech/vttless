@@ -9,7 +9,7 @@ db.User = require("./user.js");
 db.Role = require("./roles.js");
 db.Campaign = require("./campaign.js");
 db.Friend = require("./friend.js");
-
+db.ExternalFriend = require("./externalfriend.js");
 db.ROLES = ["user", "admin"];
 
 module.exports = db;

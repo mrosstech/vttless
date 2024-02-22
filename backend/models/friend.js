@@ -11,11 +11,19 @@ const Friend = mongoose.model(
     requestee: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
-        required: true
+        required: false
     },
     confirmed: {
         type: Boolean,
         required: true
+    },
+    external: {
+        type: Boolean,
+        required: true
+    },
+    email: {
+        type: String,
+        required: false
     }
 
   })
