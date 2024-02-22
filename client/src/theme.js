@@ -1,8 +1,20 @@
 // 1. import `extendTheme` function
 import { extendTheme } from '@chakra-ui/react'
+import '@fontsource/ubuntu-mono';
+import '@fontsource/inconsolata';
 
 // 2. Add your color mode config
 const config = {
+  fonts: {
+    body: `'Inconsolata', mono`,
+    myBody: "'inconsolata', 'mono'"
+  },
+  fontWeights: {
+    light: 200,
+    normal: 400,
+    medium: 500,
+    bold: 700,
+  },
   initialColorMode: 'system',
   useSystemColorMode: true,
   "colors": {
