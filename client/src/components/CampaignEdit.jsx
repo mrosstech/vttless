@@ -1,9 +1,9 @@
-import {React, useEffect, useState} from 'react';
-import axios from 'axios';
+import {React} from 'react';
+//import axios from 'axios';
 import {
     Modal, ModalOverlay, ModalContent,
     ModalHeader, ModalFooter, ModalBody,
-    ModalCloseButton, useDisclosure, Input,
+    ModalCloseButton, Input,
     Button
 } from '@chakra-ui/react'
 import {
@@ -12,19 +12,19 @@ import {
 } from '@chakra-ui/react'
 
 const CampaignEdit = (props) => {
-    const [error, setError] = useState(null);
-    const [campaignName, setCampaignName] = useState(null);
-    const [campaignDescription, setCampaignDescription] = useState(null);
-    const [campaignPlayers, setCampaignPlayers] = useState(null);
-    const [campaignGm, setCampaignGm] = useState(null);
+    // const [error, setError] = useState(null);
+    // const [campaignName, setCampaignName] = useState(null);
+    // const [campaignDescription, setCampaignDescription] = useState(null);
+    // const [campaignPlayers, setCampaignPlayers] = useState(null);
+    // const [campaignGm, setCampaignGm] = useState(null);
   
-    const API = axios.create({
-      baseURL: process.env.REACT_APP_BACKEND_BASE_URL,
-      headers: {
-          'Content-Type': 'application/json'
-      },
-      withCredentials: true,
-    });
+    // const API = axios.create({
+    //   baseURL: process.env.REACT_APP_BACKEND_BASE_URL,
+    //   headers: {
+    //       'Content-Type': 'application/json'
+    //   },
+    //   withCredentials: true,
+    // });
 
     //TODO:  Add routine to get friends.
     const submitForm = () => {

@@ -4,7 +4,6 @@ import {
     Table,
     Thead,
     Tbody,
-    Tfoot,
     Tr,
     Th,
     Td,
@@ -13,8 +12,10 @@ import {
     useDisclosure
   } from '@chakra-ui/react'
 import CampaignEdit from './CampaignEdit';
+import {useAuth} from '../providers/AuthProvider';
 
-const CampaignList = ({user}) => {
+const CampaignList = () => {
+    const {user} = useAuth();
     const { isOpen, onOpen, onClose } = useDisclosure();
     const [campaigns, setCampaigns] = useState(null);
     const [modalCampaign, setModalCampaign] = useState(null);
@@ -42,7 +43,7 @@ const CampaignList = ({user}) => {
                 console.log("Got campaign data back");
                 if (res?.data.campaigns) {
                     console.log(res.data.campaigns);
-                    if (res.data.campaigns.length == 0) {
+                    if (res.data.campaigns.length === 0) {
                       listCampaigns = <Tr><Td>No Campaigns</Td><Td>Click here to create one!</Td></Tr>;
                     } else {
                         listCampaigns = res.data.campaigns.map(campaign => 
