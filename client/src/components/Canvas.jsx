@@ -3,20 +3,20 @@ import { useRef, useEffect } from 'react';
 
 
 const Canvas = (props) => {
-    const { draw, ...rest } = props
-    const canvasRef = useRef(null);
+    const { draw, forwardedRef, ...rest } = props
+    //const canvasRef = useRef(null);
     
     
     
     useEffect(() => {
-        const canvas = canvasRef.current;
+        const canvas = forwardedRef.current;
         const context = canvas.getContext('2d');
         draw(context);
     }, [draw]);
 
 
     return (
-        <canvas ref={canvasRef} {...rest}></canvas>
+        <canvas ref={forwardedRef} {...rest}></canvas>
     )
 }
 
