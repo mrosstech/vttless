@@ -3,10 +3,20 @@ import { useRef, useEffect } from 'react';
 
 
 const Canvas = (props) => {
+    const { draw, ...rest } = props
     const canvasRef = useRef(null);
     
+    
+    
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        const context = canvas.getContext('2d');
+        draw(context);
+    }, [draw]);
+
+
     return (
-        <canvas ref={canvasRef} width={props.width} height={props.height}></canvas>
+        <canvas ref={canvasRef} {...rest}></canvas>
     )
 }
 
