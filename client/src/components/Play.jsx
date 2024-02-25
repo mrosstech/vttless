@@ -97,9 +97,9 @@ const Play = (props) => {
         let tokenYmin = 0;
 
         for (let i = 0; i < tokens.length; i++) {
-            tokenXmin = tokens[i].locX * gridSize * zoomLevel;
+            tokenXmin = tokens[i].locX * zoomLevel;
             tokenXmax = tokenXmin + tokens[i].width * zoomLevel;
-            tokenYmin = tokens[i].locY * gridSize * zoomLevel;
+            tokenYmin = tokens[i].locY * zoomLevel;
             tokenYmax = tokenYmin + tokens[i].width * zoomLevel;
             console.log(tokenXmin + " < " + x + " < " + tokenXmax); 
             if (x > tokenXmin && x < tokenXmax && y > tokenYmin && y > tokenYmax) {
@@ -110,7 +110,21 @@ const Play = (props) => {
         return false;
     }
 
-    const updateTokenPosition = (dx, dy, index) => {
+    const findSnapPoint = (x, y) => {
+        // Find the nearest grid crossing to the x, y coordinates given
+        // First get the nearest x coordinate
+        const scaledGridSize = gridSize * zoomLevel;
+        const nearestX = gridSize * Math.floor((x - offsets.x)/scaledGridSize) ;
+        const nearestY = gridSize * Math.floor((y - offsets.y)/scaledGridSize) ;
+
+        console.log("offsetX: " + offsets.x + " offsetY: " + offsets.y);
+        console.log("X: " + x + " Y: " + y);
+        console.log("nearestX: " + nearestX + " nearestY: " + nearestY);
+
+        return {x: nearestX, y: nearestY}
+    }
+
+    const updateTokenPositionRelative = (dx, dy, index) => {
         const nextToken = tokens.map((token, i) => {
             if (i === index) {
                 return {...token, locX: token.locX + dx, locY: token.locY + dy};
@@ -119,6 +133,16 @@ const Play = (props) => {
         })
         setTokens(nextToken);
     }
+    const updateTokenPositionAbsolute = (x, y, index) => {
+        const nextToken = tokens.map((token, i) => {
+            if (i === index) {
+                return {...token, locX: x, locY: y};
+            }
+            return token;
+        })
+        setTokens(nextToken);
+    }
+
 
     const mouseDownHandler = (e) => {
         // Prevent default
@@ -140,7 +164,7 @@ const Play = (props) => {
             const dx = (e.clientX - dragStart.x) / zoomLevel;
             const dy = (e.clientY - dragStart.y) / zoomLevel;
             //console.log(dx, dy);
-            updateTokenPosition(dx, dy, selectedToken);
+            updateTokenPositionRelative(dx, dy, selectedToken);
             setDragStart({x: e.clientX, y: e.clientY});
         }
     }
@@ -151,6 +175,8 @@ const Play = (props) => {
         console.log(e);
         if (isDragging) {
             setIsDragging(false);
+            const newPos = findSnapPoint(e.clientX, e.clientY);
+            updateTokenPositionAbsolute(newPos.x, newPos.y, selectedToken);
         }
     }
 
