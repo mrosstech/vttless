@@ -1,6 +1,11 @@
 import {React, useState, useEffect, useRef} from 'react';
 
-import { Flex, Box, Slider, SliderTrack, SliderFilledTrack, SliderThumb} from '@chakra-ui/react'
+import { Flex, Box, Slider, SliderTrack, SliderFilledTrack, SliderThumb, SliderMark} from '@chakra-ui/react'
+import { socket } from '../socket';
+import { ConnectionState } from './ConnectionState';
+import { ConnectionManager } from './ConnectionManager';
+import { Events } from './Events';
+
 import Canvas from './Canvas';
 import './Play.css';
 
@@ -28,7 +33,21 @@ const initTokens = [
     }
 ]
 
-console.log(initTokens);
+const initCampaign = {
+    "name": "Test Campaign",
+    maps: [
+        {
+            "name": "Test Map",
+            "gridSize": 40,
+            "gridWidth": 20,
+            "gridHeight": 20,
+            "tokens": initTokens, 
+            "bgImage": "test_map.png"
+        }
+    ]
+
+}
+//console.debug(initTokens);
 
 const Play = (props) => {
     const [tokens, setTokens] = useState(initTokens);
@@ -40,6 +59,12 @@ const Play = (props) => {
     const [isDragging, setIsDragging] = useState(null);
     const [dragStart, setDragStart] = useState({x: 0, y: 0});
     const [selectedToken, setSelectedToken] = useState(null);
+    const [layer, setLayer] = useState(1);
+
+    // Socket.io State
+    const [isConnected, setIsConnected] = useState(socket.connected);
+    const [tokenMoveEvents, setTokenMoveEvents] = useState([]);
+
 
     const gridRef = useRef(null);
     const tokenRef = useRef(null);
@@ -97,12 +122,13 @@ const Play = (props) => {
         let tokenYmin = 0;
 
         for (let i = 0; i < tokens.length; i++) {
-            tokenXmin = tokens[i].locX * zoomLevel;
-            tokenXmax = tokenXmin + tokens[i].width * zoomLevel;
-            tokenYmin = tokens[i].locY * zoomLevel;
-            tokenYmax = tokenYmin + tokens[i].width * zoomLevel;
-            console.log(tokenXmin + " < " + x + " < " + tokenXmax); 
-            if (x > tokenXmin && x < tokenXmax && y > tokenYmin && y > tokenYmax) {
+            tokenXmin = tokens[i].locX * zoomLevel + offsets.x;
+            tokenXmax = tokenXmin + tokens[i].width * zoomLevel + offsets.x;
+            tokenYmin = tokens[i].locY * zoomLevel + offsets.y;
+            tokenYmax = tokenYmin + tokens[i].width * zoomLevel + offsets.y;
+            //console.debug(tokenXmin + " < " + x + " < " + tokenXmax); 
+            //console.debug(tokenYmin + " < " + y + " < " + tokenYmax);
+            if (x > tokenXmin && x < tokenXmax && y > tokenYmin && y < tokenYmax) {
                 setSelectedToken(i);
                 return true;
             }
@@ -117,9 +143,9 @@ const Play = (props) => {
         const nearestX = gridSize * Math.floor((x - offsets.x)/scaledGridSize) ;
         const nearestY = gridSize * Math.floor((y - offsets.y)/scaledGridSize) ;
 
-        console.log("offsetX: " + offsets.x + " offsetY: " + offsets.y);
-        console.log("X: " + x + " Y: " + y);
-        console.log("nearestX: " + nearestX + " nearestY: " + nearestY);
+        //console.debug("offsetX: " + offsets.x + " offsetY: " + offsets.y);
+        //console.debug("X: " + x + " Y: " + y);
+        //console.debug("nearestX: " + nearestX + " nearestY: " + nearestY);
 
         return {x: nearestX, y: nearestY}
     }
@@ -147,10 +173,10 @@ const Play = (props) => {
     const mouseDownHandler = (e) => {
         // Prevent default
         e.preventDefault();
-        console.log(e);
-        if (isOverToken(e.clientX, e.clientY) && !isDragging) {
-            console.log('over token');
-            setDragStart({x: e.clientX, y: e.clientY});
+        //console.debug(e);
+        if (isOverToken(e.pageX, e.pageY) && !isDragging) {
+            //console.debug('over token');
+            setDragStart({x: e.pageX, y: e.pageY});
             setIsDragging(true);
         }
     }
@@ -161,51 +187,84 @@ const Play = (props) => {
             return;
         }
         if (isDragging) {
-            const dx = (e.clientX - dragStart.x) / zoomLevel;
-            const dy = (e.clientY - dragStart.y) / zoomLevel;
-            //console.log(dx, dy);
+            const dx = (e.pageX - dragStart.x) / zoomLevel;
+            const dy = (e.pageY - dragStart.y) / zoomLevel;
+            ////console.debug(dx, dy);
             updateTokenPositionRelative(dx, dy, selectedToken);
-            setDragStart({x: e.clientX, y: e.clientY});
+            setDragStart({x: e.pageX, y: e.pageY});
         }
     }
 
     const mouseUpHandler = (e) => {
         // Prevent default
         e.preventDefault();
-        console.log(e);
+        //console.debug(e);
         if (isDragging) {
             setIsDragging(false);
-            const newPos = findSnapPoint(e.clientX, e.clientY);
+            const newPos = findSnapPoint(e.pageX, e.pageY);
             updateTokenPositionAbsolute(newPos.x, newPos.y, selectedToken);
         }
     }
 
     useEffect(() => {
         getOffset(gridRef.current);
-        console.log(offsets);
+        //console.debug(offsets);
     }, []);
 
-
+    const labelStyles = {
+        mt: '2',
+        ml: '-2.5',
+        fontSize: 'sm',
+    }
 
     return (
         <Box >
-            <Slider aria-label='slider-ex-2' colorScheme='orange' defaultValue={1} max={4} min={0} step={0.5} onChange={(v) => setZoomLevel(v)}>
-                <SliderTrack>
-                    <SliderFilledTrack />
-                </SliderTrack>
-                <SliderThumb />
-            </Slider>
+            <Box p={4}>
+                Zoom Level
+                <Slider aria-label='slider-ex-2' colorScheme='orange' defaultValue={1} max={4} min={0} step={0.5} onChange={(v) => setZoomLevel(v)}>
+                    <SliderMark value={0.5} {...labelStyles}>0.5x</SliderMark>
+                    <SliderMark value={1} {...labelStyles}>1x</SliderMark>
+                    <SliderMark value={1.5} {...labelStyles}>1.5x</SliderMark>
+                    <SliderMark value={2} {...labelStyles}>2x</SliderMark>
+                    <SliderTrack>
+                        <SliderFilledTrack />
+                    </SliderTrack>
+                    <SliderThumb />
+                </Slider>
+            </Box>
+            <Box p={4}>
+                Layer
+                <Slider aria-label='slider-ex-2' colorScheme='orange' defaultValue={"1"} max={2} min={0} step={1} onChange={(v) => setLayer(v)}>
+                    <SliderMark value={0} {...labelStyles}>Background</SliderMark>
+                    <SliderMark value={1} {...labelStyles}>Token</SliderMark>
+                    <SliderMark value={2} {...labelStyles}>GM</SliderMark>
+                    <SliderTrack>
+                        <SliderFilledTrack />
+                    </SliderTrack>
+                    <SliderThumb />
+                </Slider>
+            </Box>
+            
             Play the game
             <Box className='mapwrapper'>
-                <Canvas id="tokenCanvas" forwardedRef={tokenRef} draw={drawTokens} width={gridSize * gridWidth * zoomLevel} height={gridHeight * gridSize * zoomLevel}/>
+                <Canvas id="bgCanvas"
+                    forwardedRef={gridRef}
+                    draw={drawGrid} width={gridSize * gridWidth * zoomLevel} 
+                    height={gridHeight * gridSize * zoomLevel}
+                />
                 <Canvas id="gridCanvas" 
                     forwardedRef={gridRef}
                     draw={drawGrid} 
                     width={gridSize * gridWidth * zoomLevel} height={gridHeight * gridSize * zoomLevel}
+                />
+                <Canvas id="tokenCanvas" 
+                    forwardedRef={tokenRef} 
+                    draw={drawTokens} width={gridSize * gridWidth * zoomLevel} 
+                    height={gridHeight * gridSize * zoomLevel}
                     onMouseDown={mouseDownHandler}
                     onMouseMove={mouseMoveHandler}
                     onMouseUp={mouseUpHandler}
-                />    
+                />
             </Box>
             
             

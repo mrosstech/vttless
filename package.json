@@ -2,11 +2,12 @@
     "name": "vttless",
     "version": "0.1.0",
     "private": true,
-    "workspaces": ["client", "backend"],
+    "workspaces": ["client", "backend", "eventserver"],
     "scripts": {
         "backend": "npm start --prefix backend",
         "client": "npm start --prefix client",
-        "dev": "concurrently \"npm run backend\" \"npm run client\""
+        "eventserver": "npm start --prefix eventserver",
+        "dev": "concurrently \"npm run backend\" \"npm run client\" \"npm run eventserver\""
     },
     "dependencies": {
         "concurrently": "^8.2.2"
