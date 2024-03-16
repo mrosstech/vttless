@@ -13,6 +13,7 @@ import {
   } from '@chakra-ui/react'
 import CampaignEdit from './CampaignEdit';
 import {useAuth} from '../providers/AuthProvider';
+import {api} from '../common/axiosPrivate.js';
 
 const CampaignList = () => {
     const {user} = useAuth();
@@ -21,13 +22,15 @@ const CampaignList = () => {
     const [modalCampaign, setModalCampaign] = useState(null);
     const [error, setError] = useState(null);
     
-    const API = axios.create({
-      baseURL: process.env.REACT_APP_BACKEND_BASE_URL,
-      headers: {
-          'Content-Type': 'application/json'
-      },
-      withCredentials: true,
-    });
+    // const API = axios.create({
+    //     baseURL: process.env.REACT_APP_BACKEND_BASE_URL,
+    //     headers: {
+    //         'Content-Type': 'application/json'
+    //     },
+    //     withCredentials: true,
+    // });
+    
+    
     function toggleModal(campaign) {
         console.log("Clicked td");
         setModalCampaign(campaign);
@@ -37,7 +40,7 @@ const CampaignList = () => {
         // Get the users campaigns
         if (user) {
           try {
-            const res =  API.get("/campaigns/list", {
+            const res =  api.get("/campaigns/list", {
             }).then((res) => {
                 let listCampaigns = "";
                 console.log("Got campaign data back");

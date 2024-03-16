@@ -1,9 +1,9 @@
 import axios from "axios";
-
+import { api } from '../common/axiosPrivate'
 
 
 const register = (username, email, password) => {
-    return axios.post("/auth/signup", {
+    return api.post("/auth/signup", {
         username,
         email,
         password
@@ -14,7 +14,7 @@ const login = (username, password) => {
     console.log("Attempting login through AuthProvider");
     console.log("Using username: " + username);
     console.log("Using password: " + password);
-    return axios.post("/auth/login", {
+    return api.post("/auth/login", {
         username,
         password,
     })
@@ -34,7 +34,7 @@ const logout = () => {
     console.log("Removing local user data");
     localStorage.removeItem("vttless-user");
     
-    return axios.get("/auth/logout").then((response) => {
+    return api.get("/auth/logout").then((response) => {
         return response.data;
     });
 }
