@@ -159,7 +159,7 @@ const Play = (props) => {
         })
         setTokens(nextToken);
     }
-    const updateTokenPositionAbsolute = (x, y, index) => {
+    const updateTokenPositionAbsolute = (x, y, index, external) => {
         const nextToken = tokens.map((token, i) => {
             if (i === index) {
                 return {...token, locX: x, locY: y};
@@ -167,6 +167,10 @@ const Play = (props) => {
             return token;
         })
         setTokens(nextToken);
+        if (isConnected && !external) {
+            console.log("Emitting tokenMove");
+            socket.emit('tokenMove', {x: x, y: y, index: index});
+        }
     }
 
 
@@ -202,7 +206,7 @@ const Play = (props) => {
         if (isDragging) {
             setIsDragging(false);
             const newPos = findSnapPoint(e.pageX, e.pageY);
-            updateTokenPositionAbsolute(newPos.x, newPos.y, selectedToken);
+            updateTokenPositionAbsolute(newPos.x, newPos.y, selectedToken, false);
         }
     }
 
@@ -210,6 +214,29 @@ const Play = (props) => {
         getOffset(gridRef.current);
         //console.debug(offsets);
     }, []);
+
+    useEffect(() => {
+        function onConnect() {
+            setIsConnected(true);
+        }
+        function onDisconnect() {
+            setIsConnected(false);
+        }
+        function tokenMoveEvents(value) {
+            setTokenMoveEvents(tokenMoveEvents.concat(value));
+        }
+
+        socket.on('connect', onConnect);
+        socket.on('disconnect', onDisconnect);
+        socket.on('tokenMove', (data) => {
+            updateTokenPositionAbsolute(data.x, data.y, data.index, true);
+        });
+        return () => {
+            socket.off('connect', onConnect);
+            socket.off('disconnect', onDisconnect);
+        };
+
+    });
 
     const labelStyles = {
         mt: '2',

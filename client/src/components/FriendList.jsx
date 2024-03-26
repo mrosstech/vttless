@@ -10,9 +10,11 @@ import {
     TableCaption,
     TableContainer,
   } from '@chakra-ui/react'
+import {useAuth} from '../providers/AuthProvider';
 //import CampaignEdit from './CampaignEdit';
 
-const FriendList = ({user}) => {
+const FriendList = () => {
+    const {user} = useAuth();
     //const { isOpen, onOpen, onClose } = useDisclosure();
     const [friends, setFriends] = useState(null);
     //const [modalCampaign, setModalCampaign] = useState(null);
@@ -42,26 +44,21 @@ const FriendList = ({user}) => {
             }).then((res) => {
                 let listFriends = "";
                 console.log("Got friends data back");
-                if (res?.data.friends) {
-                    console.log(res.data.friends);
-                    if (res.data.friends.length === 0) {
-                      listFriends = <Tr><Td>No Friends</Td><Td>Click here to add one!</Td></Tr>;
-                    } else {
-                        listFriends = res.data.friends.map(friend => 
-                            <Tr key={friend._id}>
-                                <Td>{friend.name}</Td>
-                                <Td>{friend.name}</Td>
-                                <Td>
-                                    <div onClick={() => removeFriend(friend)}>Remove</div>
-                                </Td>
-                            </Tr>      
-                        );
-                    }
-                    setFriends(listFriends);
+                console.log(res);
+                if (res.data.length === 0) {
+                    listFriends = <Tr><Td>No Friends</Td><Td>Click here to add one!</Td></Tr>;
                 } else {
-                    console.log("incorrect submission");
-                    setError(res.message);
+                    listFriends = res.data.map(friend => 
+                        <Tr key={friend._id}>
+                            <Td>{friend.username}</Td>
+                            <Td>{friend.username}</Td>
+                            <Td>
+                                <div onClick={() => removeFriend(friend)}>Remove</div>
+                            </Td>
+                        </Tr>      
+                    );
                 }
+                setFriends(listFriends);
             });
           } catch (err) {
               if (!err?.response) {
@@ -73,7 +70,7 @@ const FriendList = ({user}) => {
         } else {
           console.log("no user logged in");
         }
-      }, [friends, API, user]);
+      }, [user]);
 
       return (
         <div>

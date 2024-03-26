@@ -1,21 +1,35 @@
 require('dotenv').config();
 const express = require("express");
-const serverPort = 4001
-const app = express();
-const cors = require("cors");
-const http = require("http");
-const {Server} = require("socket.io");
+const { createServer } = require("http");
+const { Server } = require("socket.io");
+//import * as socket from 'socket.io';
 
-app.use(cors());
-const server = http.createServer(app);
-const io = new Server(server);
+const app = express();
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+    cors: {
+      origin: "http://localhost:3000",
+    }
+ });
+
+
+const serverPort = 4001;
+
 io.on("connection", (socket) => {
   console.log("a user connected");
-})
+
+  socket.on("tokenMove", (data) => {
+    console.log("Token Move Recieved by the Server");
+    socket.broadcast.emit("tokenMove", data);
+  
+  });
+});
 
 
 
 
-app.listen(serverPort, ()=>{
+
+
+httpServer.listen(serverPort, ()=>{
     console.log("Server is listening on port " + serverPort);
 })

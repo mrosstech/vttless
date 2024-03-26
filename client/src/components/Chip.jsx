@@ -7,7 +7,7 @@ export const Chip = ({ email, onCloseClick }) => (
       <TagLabel>{email}</TagLabel>
       <TagCloseButton
         onClick={() => {
-          // TBD
+          onCloseClick(email)
         }}
       />
     </Tag>

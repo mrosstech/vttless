@@ -9,10 +9,10 @@ import theme from './theme';
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-  <>
-    <ColorModeScript initialColorMode={theme.initialColorMode} />
-    <App />
-  </>
+    <>
+      <ColorModeScript initialColorMode={theme.initialColorMode} />
+      <App />
+    </>
   </React.StrictMode>
 );
 
