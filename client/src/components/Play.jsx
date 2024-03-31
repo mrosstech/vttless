@@ -2,8 +2,6 @@ import {React, useState, useEffect, useRef} from 'react';
 
 import { Flex, Box, Slider, SliderTrack, SliderFilledTrack, SliderThumb, SliderMark} from '@chakra-ui/react'
 import { socket } from '../socket';
-import { ConnectionState } from './ConnectionState';
-import { ConnectionManager } from './ConnectionManager';
 import { Events } from './Events';
 
 import Canvas from './Canvas';
@@ -35,6 +33,7 @@ const initTokens = [
 
 const initCampaign = {
     "name": "Test Campaign",
+    "id": "12345",
     maps: [
         {
             "name": "Test Map",
@@ -61,6 +60,7 @@ const Play = (props) => {
     const [selectedToken, setSelectedToken] = useState(null);
     const [layer, setLayer] = useState(1);
 
+    
     // Socket.io State
     const [isConnected, setIsConnected] = useState(socket.connected);
     const [tokenMoveEvents, setTokenMoveEvents] = useState([]);
@@ -215,6 +215,7 @@ const Play = (props) => {
         //console.debug(offsets);
     }, []);
 
+
     useEffect(() => {
         function onConnect() {
             setIsConnected(true);
@@ -231,6 +232,7 @@ const Play = (props) => {
         socket.on('tokenMove', (data) => {
             updateTokenPositionAbsolute(data.x, data.y, data.index, true);
         });
+        socket.connect();
         return () => {
             socket.off('connect', onConnect);
             socket.off('disconnect', onDisconnect);
