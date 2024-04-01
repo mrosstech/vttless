@@ -20,9 +20,15 @@ io.on("connection", (socket) => {
 
   socket.on("tokenMove", (data) => {
     console.log("Token Move Recieved by the Server");
-    socket.broadcast.emit("tokenMove", data);
+    console.log("Token move for campaign: " + data.campaignId + " and token: " + data.tokenId + " and x: " + data.x + " and y: " + data.y + "and player: " + data.playerId);
+    
+    socket.to(data.campaignId).emit("tokenMove", data);
   
   });
+  socket.on("joinCampaign", (campaignId) => {
+    console.log("Joining campaign: " + campaignId + " for user: " + socket.id);
+    socket.join(campaignId);
+  })
 });
 
 

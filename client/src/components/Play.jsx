@@ -1,5 +1,5 @@
 import {React, useState, useEffect, useRef} from 'react';
-
+import {useAuth} from '../providers/AuthProvider';
 import { Flex, Box, Slider, SliderTrack, SliderFilledTrack, SliderThumb, SliderMark} from '@chakra-ui/react'
 import { socket } from '../socket';
 import { Events } from './Events';
@@ -27,7 +27,8 @@ const initTokens = [
         "locY": 0,
         "width": 40,
         "isPlayer": true,
-        "img": await tokenImage
+        "img": await tokenImage,
+        "usedBy": ["659f074235616095a27f191f", "65b850312c27c48f56ae97a5"]
     }
 ]
 
@@ -49,6 +50,7 @@ const initCampaign = {
 //console.debug(initTokens);
 
 const Play = (props) => {
+    const {user} = useAuth();
     const [tokens, setTokens] = useState(initTokens);
     const [zoomLevel, setZoomLevel] = useState(1);
     const [gridSize, setGridSize] = useState(40);
@@ -57,7 +59,7 @@ const Play = (props) => {
     const [offsets, setOffsets] = useState({x: 0, y: 0})
     const [isDragging, setIsDragging] = useState(null);
     const [dragStart, setDragStart] = useState({x: 0, y: 0});
-    const [selectedToken, setSelectedToken] = useState(null);
+    let selectedToken = useRef(null);
     const [layer, setLayer] = useState(1);
 
     
@@ -68,6 +70,7 @@ const Play = (props) => {
 
     const gridRef = useRef(null);
     const tokenRef = useRef(null);
+    let originRef = useRef(null);
 
     // We're going to need a few things here:
     //      - Token array:
@@ -126,10 +129,8 @@ const Play = (props) => {
             tokenXmax = tokenXmin + tokens[i].width * zoomLevel + offsets.x;
             tokenYmin = tokens[i].locY * zoomLevel + offsets.y;
             tokenYmax = tokenYmin + tokens[i].width * zoomLevel + offsets.y;
-            //console.debug(tokenXmin + " < " + x + " < " + tokenXmax); 
-            //console.debug(tokenYmin + " < " + y + " < " + tokenYmax);
             if (x > tokenXmin && x < tokenXmax && y > tokenYmin && y < tokenYmax) {
-                setSelectedToken(i);
+                selectedToken.current = i;
                 return true;
             }
         }
@@ -142,10 +143,6 @@ const Play = (props) => {
         const scaledGridSize = gridSize * zoomLevel;
         const nearestX = gridSize * Math.floor((x - offsets.x)/scaledGridSize) ;
         const nearestY = gridSize * Math.floor((y - offsets.y)/scaledGridSize) ;
-
-        //console.debug("offsetX: " + offsets.x + " offsetY: " + offsets.y);
-        //console.debug("X: " + x + " Y: " + y);
-        //console.debug("nearestX: " + nearestX + " nearestY: " + nearestY);
 
         return {x: nearestX, y: nearestY}
     }
@@ -169,19 +166,36 @@ const Play = (props) => {
         setTokens(nextToken);
         if (isConnected && !external) {
             console.log("Emitting tokenMove");
-            socket.emit('tokenMove', {x: x, y: y, index: index});
+            socket.emit('tokenMove', {x: x, y: y, tokenId: index, campaignId: initCampaign.id, playerId: user.user.id});
         }
     }
 
+    const tokenSelectCheck = (x, y) => {
+        if (Math.abs(x-originRef.current.x) < 3 && Math.abs(y-originRef.current.y) < 3) {
+            return true;
+        } else {
+            return false;
+        }
+    }
 
     const mouseDownHandler = (e) => {
         // Prevent default
         e.preventDefault();
         //console.debug(e);
         if (isOverToken(e.pageX, e.pageY) && !isDragging) {
-            //console.debug('over token');
-            setDragStart({x: e.pageX, y: e.pageY});
-            setIsDragging(true);
+            // Check if the user can move this token
+            console.log("Checking token for ownership " + selectedToken.current);
+            initTokens[selectedToken.current].usedBy.forEach((playerID) => {
+                if (playerID === user.user.id) {
+                    console.log("You can move this.");
+                    setDragStart({x: e.pageX, y: e.pageY});
+                    originRef.current = {x: e.pageX, y: e.pageY};
+                    setIsDragging(true);
+                    return;
+                } else {
+                }
+            })
+            
         }
     }
     const mouseMoveHandler = (e) => {
@@ -193,8 +207,7 @@ const Play = (props) => {
         if (isDragging) {
             const dx = (e.pageX - dragStart.x) / zoomLevel;
             const dy = (e.pageY - dragStart.y) / zoomLevel;
-            ////console.debug(dx, dy);
-            updateTokenPositionRelative(dx, dy, selectedToken);
+            updateTokenPositionRelative(dx, dy, selectedToken.current);
             setDragStart({x: e.pageX, y: e.pageY});
         }
     }
@@ -203,10 +216,15 @@ const Play = (props) => {
         // Prevent default
         e.preventDefault();
         //console.debug(e);
-        if (isDragging) {
+        // Check to see if the move was just a token select.
+        if (isDragging && !tokenSelectCheck(e.pageX, e.pageY)) {
             setIsDragging(false);
             const newPos = findSnapPoint(e.pageX, e.pageY);
-            updateTokenPositionAbsolute(newPos.x, newPos.y, selectedToken, false);
+            updateTokenPositionAbsolute(newPos.x, newPos.y, selectedToken.current, false);
+        } else if (isDragging && tokenSelectCheck(e.pageX, e.pageY)) {
+            // TODO: Create token select function to mark token as selected and draw the token select graphics around it.
+            console.log("Token just selected");
+            setIsDragging(false);
         }
     }
 
@@ -230,15 +248,21 @@ const Play = (props) => {
         socket.on('connect', onConnect);
         socket.on('disconnect', onDisconnect);
         socket.on('tokenMove', (data) => {
-            updateTokenPositionAbsolute(data.x, data.y, data.index, true);
+            console.log("Token Move Recieved by the Server");
+            console.log("Token move for campaign: " + data.campaignId + " and token: " + data.tokenId + " and x: " + data.x + " and y: " + data.y + "and player: " + data.playerId);
+        
+            updateTokenPositionAbsolute(data.x, data.y, data.tokenId, true);
         });
+        // Connect manually to the socket server.
         socket.connect();
+        // Change the room to the campaign room.
+        socket.emit('joinCampaign', initCampaign.id);
         return () => {
             socket.off('connect', onConnect);
             socket.off('disconnect', onDisconnect);
         };
 
-    });
+    }, []);
 
     const labelStyles = {
         mt: '2',
