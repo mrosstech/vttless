@@ -1,9 +1,11 @@
 import {React} from 'react';
 import axios from 'axios';
+import {useAuth} from '../providers/AuthProvider';
 
-const Profile = ({user}) => {
+const Profile = () => {
+    const {user} = useAuth();
     return (
-        <div></div>
+        <div>Profile</div>
     );
 }
 

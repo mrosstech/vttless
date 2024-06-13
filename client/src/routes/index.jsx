@@ -9,6 +9,7 @@ import Friends from "../components/Friends";
 import Campaigns from "../components/Campaigns";
 import NavBar from '../components/Navbar';
 import Play from '../components/Play';
+import Profile from '../components/Profile';
 
 const Routes = () => {
     const { user } = useAuth();
@@ -51,6 +52,10 @@ const Routes = () => {
                         {
                             path: "/logout",
                             element: <Logout />
+                        },
+                        {
+                            path: "/profile",
+                            element: <Profile />
                         }
                     ]
                 }
