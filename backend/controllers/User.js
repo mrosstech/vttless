@@ -5,6 +5,18 @@ const { User, Role, Friend } = require("../models");
 exports.signup = async (req, res) => {
     try {
         const {email, username, password} = req.body;
+        // Add validation for required fields
+        if (!username || !email || !password) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing required fields',
+                errors: {
+                    ...((!username) && { username: 'Username is required' }),
+                    ...((!email) && { email: 'Email is required' }),
+                    ...((!password) && { password: 'Password is required' })
+                }
+            });
+        }
         console.log("New user request!  Username: " + username);
         // Ensure that the username and email don't already exist
         const existingEmail = await User.findOne({ email });

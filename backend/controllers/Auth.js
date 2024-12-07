@@ -30,6 +30,62 @@ exports.login = async (req, res, next) => {
     }) (req, res, next);
   };
 
+
+  exports.changePassword = async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+        const user = req.user;
+
+        // Verify current password
+        const isValidPassword = await user.isValidPassword(currentPassword);
+        if (!isValidPassword) {
+            return res.status(400).json({
+                success: false,
+                message: 'Current password is incorrect'
+            });
+        }
+
+        // Check if new password was previously used
+        const wasUsedBefore = await user.checkPasswordHistory(newPassword);
+        if (wasUsedBefore) {
+            return res.status(400).json({
+                success: false,
+                message: 'This password was previously used. Please choose a different password.'
+            });
+        }
+
+        // Validate new password
+        const validation = await passwordValidator.validate(
+            newPassword, 
+            user.email, 
+            user.username
+        );
+
+        if (!validation.isValid) {
+            return res.status(400).json({
+                success: false,
+                message: 'Password validation failed',
+                errors: validation.errors
+            });
+        }
+
+        // Update password
+        user.password = newPassword;
+        await user.save();
+
+        res.json({
+            success: true,
+            message: 'Password updated successfully'
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Error changing password',
+            error: error.message
+        });
+    }
+};
+
 exports.validate = async (req, res, next) => {
     try {  
       console.log("Validated!");

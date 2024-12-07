@@ -11,30 +11,58 @@ const UserSchema = new mongoose.Schema({
             ref: "Role"
         }
     ],
-    profilePicture: { type: String, required: false }
+    profilePicture: { type: String, required: false },
+    passwordHistory: [{
+        password: String,
+        createdAt: {
+            type: Date,
+            default: Date.now
+        }
+    }],
+    passwordChangedAt: Date
     
-});
+}, {timestamps: true});
 
-UserSchema.pre('save', function (next) {
-    var user = this;
-    if (user.isModified('password')) {
-        console.log("Password has been modified... running encryption");
-        bcrypt.genSalt(10, function(err, salt) {
-            if (err) {
-                return next(err);
+UserSchema.pre('save', async function(next) {
+    if (this.isModified('password')) {
+        try {
+            // Generate salt and hash password
+            const salt = await bcrypt.genSalt(12);
+            const hash = await bcrypt.hash(this.password, salt);
+
+            // Add to password history
+            this.passwordHistory.unshift({
+                password: hash,
+                createdAt: new Date()
+            });
+
+            // Keep only last 5 passwords
+            if (this.passwordHistory.length > 5) {
+                this.passwordHistory = this.passwordHistory.slice(0, 5);
             }
-            bcrypt.hash(user.password, salt, function(err, hash) {
-                if (err) {
-                    return next(err);
-                }
-                user.password = hash;
-                next();
-            })
-        }); 
+
+            this.password = hash;
+            this.passwordChangedAt = new Date();
+            next();
+        } catch (error) {
+            next(error);
+        }
+    } else {
+        next();
     }
 });
 
 
+UserSchema.methods.checkPasswordHistory = async function(newPassword) {
+    // Check last 5 passwords
+    for (let i = 0; i < Math.min(this.passwordHistory.length, 5); i++) {
+        const isMatch = await bcrypt.compare(newPassword, this.passwordHistory[i].password);
+        if (isMatch) {
+            return true; // Password was previously used
+        }
+    }
+    return false;
+};
 
 UserSchema.methods.isValidPassword = async function(password) {
     return await bcrypt.compare(password, this.password);

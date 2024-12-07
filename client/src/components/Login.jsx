@@ -162,27 +162,6 @@ const Login = () => {
                 </Stack>
             </Container>
         </form>
-        // <div className="login">
-        //     <div className="loginDiv">
-        //         <div className="loginTitle"><p className="text-center">Get In Here! The game is starting!</p></div>
-        //         <div>
-        //             <form className="loginForm" onSubmit={handleLoginFormSubmit}>
-        //                 <div className="centeredDiv">
-        //                     <input className="loginInput" id="username" name="username" type="text" onChange={handleUsernameChange} />
-        //                 </div>
-        //                 <div className="centeredDiv">
-        //                     <input className="loginInput" id="password" name="password" type="password" onChange={handlePasswordChange} />
-        //                 </div>
-        //                 <div className="centeredDiv">
-        //                     <button className="standardButton" type="submit">Enter the Realm</button>
-        //                 </div>
-        //                 <div>
-        //                     <Link className="link" to="/signup">Don't have an account?  Sign up here.</Link>
-        //                 </div>
-        //             </form>
-        //         </div>
-        //     </div>
-        // </div>
     );
 };
 
