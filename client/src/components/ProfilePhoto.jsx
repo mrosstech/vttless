@@ -1,5 +1,5 @@
 // src/components/ProfilePhoto.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
     Box,
     Button,
@@ -10,13 +10,30 @@ import {
     Input
 } from '@chakra-ui/react';
 import { FaUser, FaUpload } from 'react-icons/fa';
+import {useAuth} from '../providers/AuthProvider';
 import axios from 'axios';
+
+// Utility function to handle profile photo URL caching
+const getProfilePhotoFromCache = () => {
+    console.log("getProfilePhotoFromCache");
+    const cached = localStorage.getItem('profilePhotoUrl');
+    if (cached) {
+      const { url, expiry } = JSON.parse(cached);
+      if (expiry > Date.now()) {
+        return url;
+      }
+      localStorage.removeItem('profilePhotoUrl'); // Clear expired cache
+    }
+    return null;
+};
 
 const ProfilePhoto = ({ user }) => {
     const [selectedFile, setSelectedFile] = useState(null);
     const [previewUrl, setPreviewUrl] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
+    const [profilePhotoUrl, setProfilePhotoUrl] = useState('');
     const toast = useToast();
+    const myUser = useAuth();
 
     const handleFileSelect = (event) => {
         const file = event.target.files[0];
@@ -47,6 +64,35 @@ const ProfilePhoto = ({ user }) => {
             setPreviewUrl(URL.createObjectURL(file));
         }
     };
+    const fetchProfilePhoto = async () => {
+        console.log("fetchProfilePhoto");
+        try {
+            // First check cache
+            const cachedUrl = getProfilePhotoFromCache();
+            if (cachedUrl) {
+            setProfilePhotoUrl(cachedUrl);
+            return;
+            }
+            const response = await axios.get(`${process.env.REACT_APP_BACKEND_BASE_URL}/images/profile-photo-download-url`, {
+            headers: {
+                Authorization: `Bearer ${localStorage.getItem('token')}`
+            }
+            });
+            const { downloadUrl } = response.data;
+
+            // Cache the URL with expiration (50 minutes to account for hour limit on the presigned URL)
+            localStorage.setItem('profilePhotoUrl', JSON.stringify({ url: downloadUrl, expiry: Date.now() + 50 * 60 * 1000 }));
+            setProfilePhotoUrl(downloadUrl);
+        } catch (error) {
+            console.error('Error fetching profile photo:', error);
+        }
+    };
+
+    useEffect(() => {
+        if (myUser) {
+          fetchProfilePhoto();
+        }
+      }, [myUser]);
 
     const uploadPhoto = async () => {
         if (!selectedFile) return;
@@ -87,6 +133,8 @@ const ProfilePhoto = ({ user }) => {
                 status: 'success',
                 duration: 3000,
             });
+            // Clear the URL cache
+            localStorage.removeItem('profilePhotoUrl');
 
         } catch (error) {
             toast({
@@ -112,9 +160,9 @@ const ProfilePhoto = ({ user }) => {
                 border="2px solid"
                 borderColor="orange.500"
             >
-                {previewUrl || user.photoUrl ? (
+                {previewUrl || profilePhotoUrl ? (
                     <Image
-                        src={previewUrl || user.photoUrl}
+                        src={previewUrl || profilePhotoUrl}
                         alt="Profile"
                         width="100%"
                         height="100%"
