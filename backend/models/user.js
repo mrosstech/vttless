@@ -11,7 +11,10 @@ const UserSchema = new mongoose.Schema({
             ref: "Role"
         }
     ],
-    profilePicture: { type: String, required: false },
+    photoUrl: {
+        type: String,
+        default: '' // or some default photo URL
+    },
     passwordHistory: [{
         password: String,
         createdAt: {
@@ -75,6 +78,7 @@ UserSchema.methods.usernameExists = async function(username) {
 UserSchema.methods.emailExists = async function(email) {
     return await this.findOne({email})
 }
+
 
 UserSchema
 const User = mongoose.model('User', UserSchema);

@@ -90,7 +90,10 @@ const MenuToggle = ({ toggle, isOpen }) => {
               <>
               <MenuItem to="/logout">Logout</MenuItem>     
               <MenuItem to="/profile" isLast>
-                <Avatar name={user.user.username} src={user.user.profilePicture} />{user.user.username}
+                <Flex align="center">
+                  <Avatar name={user.user.username} src={user.user.profilePicture} /><Text>{user.user.username}</Text>
+                </Flex>
+                
               </MenuItem>
               </>
           : 
