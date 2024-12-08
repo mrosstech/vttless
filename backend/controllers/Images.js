@@ -1,4 +1,4 @@
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const crypto = require('crypto');
 const User = require('../models/user');
@@ -49,5 +49,27 @@ exports.updateProfilePhoto = async (req, res) => {
     } catch (error) {
         console.error('Error updating profile photo:', error);
         res.status(500).json({ error: 'Failed to update profile photo' });
+    }
+};
+
+exports.getProfilePhotoDownloadUrl = async (req, res) => {
+    console.log("Getting profile photo download URL")
+    try {
+        const photoUrl = req.user.photoUrl;
+        console.log("Photo URL: " + photoUrl);
+        const key = photoUrl.split('.com/')[1];
+        const command = new GetObjectCommand({
+            Bucket: process.env.AWS_S3_BUCKET_NAME,
+            Key: key,
+            ContentType: 'image/jpeg', // Make this dynamic based on file type
+        });
+        const downloadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+        console.log("Download URL: " + downloadUrl)
+        res.json({
+            downloadUrl
+        });
+    } catch (error) {
+        console.error('Error generating signed URL:', error);
+        res.status(500).json({ error: 'Failed to generate download URL' });
     }
 };

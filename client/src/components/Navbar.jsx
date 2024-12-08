@@ -1,15 +1,61 @@
-import React from "react";
-import {useState} from "react";
+import React, { useState, useEffect } from "react";
 import { Link, Box, Flex, Text, Button, Stack, Avatar } from "@chakra-ui/react";
 import Logo from "./Logo";
+import axios from 'axios';
 import {useAuth} from '../providers/AuthProvider';
 import {Outlet} from 'react-router-dom';
+
+
+// Utility function to handle profile photo URL caching
+const getProfilePhotoFromCache = () => {
+  console.log("getProfilePhotoFromCache");
+  const cached = localStorage.getItem('profilePhotoUrl');
+  if (cached) {
+    const { url, expiry } = JSON.parse(cached);
+    if (expiry > Date.now()) {
+      return url;
+    }
+    localStorage.removeItem('profilePhotoUrl'); // Clear expired cache
+  }
+  return null;
+};
 
 const NavBar = (props) => {
 
     const [isOpen, setIsOpen] = useState(false);
-
+    const [profilePhotoUrl, setProfilePhotoUrl] = useState('');
     const toggle = () => setIsOpen(!isOpen);
+    const user = useAuth();
+    const fetchProfilePhoto = async () => {
+      console.log("fetchProfilePhoto");
+      try {
+        // First check cache
+        const cachedUrl = getProfilePhotoFromCache();
+        if (cachedUrl) {
+          setProfilePhotoUrl(cachedUrl);
+          return;
+        }
+        const response = await axios.get(`${process.env.REACT_APP_BACKEND_BASE_URL}/images/profile-photo-download-url`, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        const { downloadUrl } = response.data;
+
+        // Cache the URL with expiration (50 minutes to account for hour limit on the presigned URL)
+        localStorage.setItem('profilePhotoUrl', JSON.stringify({ url: downloadUrl, expiry: Date.now() + 50 * 60 * 1000 }));
+        setProfilePhotoUrl(downloadUrl);
+      } catch (error) {
+        console.error('Error fetching profile photo:', error);
+      }
+    };
+
+    useEffect(() => {
+      if (user) {
+        fetchProfilePhoto();
+      }
+    }, [user]);
+  
     console.log("Navbar:");
     console.log(props.user);
     return (
@@ -20,7 +66,7 @@ const NavBar = (props) => {
                 color={["white", "white", "primary.500", "primary.500"]}
             />
             <MenuToggle toggle={toggle} isOpen={isOpen} />
-            <MenuLinks isOpen={isOpen} user={props.user} isLoggedIn={props.isLoggedIn}/>
+            <MenuLinks isOpen={isOpen} user={props.user} isLoggedIn={props.isLoggedIn} profilePhotoUrl={profilePhotoUrl}/>
         </NavBarContainer>
         <Outlet />
       </>
@@ -69,7 +115,7 @@ const MenuToggle = ({ toggle, isOpen }) => {
     );
   };
   
-  const MenuLinks = ({ isOpen }) => {
+  const MenuLinks = ({ isOpen, isLoggedIn, profilePhotoUrl }) => {
     const {user} = useAuth();
     return (
       <Box
@@ -91,7 +137,7 @@ const MenuToggle = ({ toggle, isOpen }) => {
               <MenuItem to="/logout">Logout</MenuItem>     
               <MenuItem to="/profile" isLast>
                 <Flex align="center">
-                  <Avatar name={user.user.username} src={user.user.profilePicture} /><Text>{user.user.username}</Text>
+                  <Avatar name={user.user.username} src={profilePhotoUrl || ''} /><Text>{user.user.username}</Text>
                 </Flex>
                 
               </MenuItem>
