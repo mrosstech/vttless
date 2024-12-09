@@ -26,6 +26,13 @@ const UserSchema = new mongoose.Schema({
     
 }, {timestamps: true});
 
+UserSchema.virtual('friends', {
+    ref: 'Friend',
+    localField: '_id',
+    foreignField: 'requestor',
+    match: { confirmed: true }
+});
+
 UserSchema.pre('save', async function(next) {
     if (this.isModified('password')) {
         try {

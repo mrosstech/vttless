@@ -1,8 +1,7 @@
 const mongoose = require("mongoose");
 
-const Friend = mongoose.model(
-  "Friend",
-  new mongoose.Schema({
+
+const friendSchema = new mongoose.Schema({
     requestor: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
@@ -11,22 +10,24 @@ const Friend = mongoose.model(
     requestee: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
-        required: false
+        required: true
     },
     confirmed: {
         type: Boolean,
-        required: true
+        default: false
     },
-    external: {
-        type: Boolean,
-        required: true
+    created: {
+        type: Date,
+        default: Date.now
     },
-    email: {
-        type: String,
-        required: false
+    lastModified: {
+        type: Date,
+        default: Date.now
     }
 
-  })
-);
+})
 
-module.exports = Friend;
+// Ensure unique friendship pairs
+friendSchema.index({ requestor: 1, requestee: 1 }, { unique: true });
+
+module.exports = mongoose.model('Friend', friendSchema);

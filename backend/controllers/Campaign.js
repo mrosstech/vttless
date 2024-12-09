@@ -1,73 +1,143 @@
-const { Campaign } = require('../models');
+const Campaign = require('../models/campaign');
+const User = require('../models/user');
+const mongoose = require('mongoose');
+const Friend = require('../models/friend');
 
-exports.list = async (req, res, next) => {
-    try {
-        const { user } = req;
-        //console.log(user);
-        const campaigns = await Campaign.find({ $or: [ {"gm": user._id}, {"players": { $elemMatch: { $eq: user._id }}} ] } );
-        res.send({campaigns: campaigns});
-        next;
-    } catch (err) {
-        console.log(err);
-        res.send({error: "Error getting campaigns"});
-    }
-}
 
-exports.add = async (req, res, next) => {
+exports.list = async (req, res) => {
     try {
-        const {name, description, players, gm} = req.body;
-        const { user } = req;
-        //console.log(user);
-        const newCampaign = new Campaign({
-            name, description, players, gm
+        console.log("Starting list users...");
+        console.log("User: " + req.user._id);
+
+        // First get the user's friends list
+        const user = await User.findById(req.user._id).populate('friends');
+
+        const friendships = await Friend.find({
+            $and: [
+                {
+                    $or: [
+                        { requestor: req.user._id },
+                        { requestee: req.user._id }
+                    ]
+                },
+                { confirmed: true }
+            ]
         });
-        console.log("Saving new campaign!");
-        await newCampaign.save();
-        res.status(201).send({message: "Campaign added successfully!"});
-    } catch (err) {
-        console.log(err);
-        res.send({error: "Error adding new campaign"});
-    }
-}
 
-exports.delete = async (req, res, next) => {
-    try{
-        const { user } = req;
-        const {campaignId} = req.body;
-        const deleteResult = await Campaign.deleteOne({$and: [{"_id": campaignId}, {"gm": user._id}]});
-        if (deleteResult.deletedCount > 0) {
-            console.log("Campaign deleted!");
-            res.status(201).send({message: "Campaign deleted successfully"});
-        } else {
-            console.log("Campaign not found");
-            res.status(400).send({error: "Campaign not found"});
-        }
-    } catch (err) {
-        console.log("Error deleting campaign");
-        res.status(500).send({ error: "Server error deleting campaign"});
-    }
-}
-
-exports.update = async (req, res, next) => {
-    try {
-        const {user} = req;
-        const {name, description, players, gm, id} = req.body;
-        updateResult = await Campaign.updateOne(
-            { $and: [{_id: id}, {gm: user._id}]},
-            {
-                $set: { name: name, description: description, players: players, gm: gm},
-                $currentDate: { lastModified: true}
-            }
+        // Extract friend IDs from the friendships
+        const friendIds = friendships.map(friendship => 
+            friendship.requestor.toString() === req.user._id.toString() 
+                ? friendship.requestee.toString() 
+                : friendship.requestor.toString()
         );
-        if (updateResult.matchedCount == 1 && updateResult.modifiedCount == 1) {
-            console.log("Campaign updated successfully");
-            res.status(201).send({message: "Campaign updated successfully"});
-        } else {
-            console.log("No campaign to update");
-            res.status(400).send({message: "No campaign to update"});
-        }
-    } catch (err) {
-        console.log("Error updating campaign");
-        res.status(500).send({ error: "Server error updating campaign"});
+
+        console.log("Friends IDs:", friendIds);
+
+        // Find campaigns where:
+        // 1. User is GM
+        // 2. User is a player
+        // 3. GM is a friend and user is not already a player
+        const campaigns = await Campaign.find({
+            $or: [
+                { gm: req.user._id },
+                { players: req.user._id },
+                {
+                    gm: { $in: friendIds },
+                    players: { $ne: req.user._id }
+                }
+            ]
+        })
+        .populate('gm', 'username')
+        .populate('players', 'username')
+        .sort({ created: -1 }); // Most recent first
+
+        console.log("Campaigns: " + campaigns);
+        
+        // Add a flag to indicate if this is a friend's campaign
+        const campaignsWithMetadata = campaigns.map(campaign => {
+            const gmId = campaign.gm._id.toString();
+            console.log("Campaign GM ID: " + gmId);
+            const isFriendsCampaign = friendIds.includes(gmId);
+            return {
+                ...campaign.toObject(),
+                isFriendsCampaign
+            };
+        });
+        console.log(campaignsWithMetadata[1]);
+        res.json(campaignsWithMetadata);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
     }
-}
+};
+
+exports.add = async (req, res) => {
+    try {
+        const campaign = new Campaign({
+            name: req.body.name,
+            description: req.body.description,
+            gm: req.user._id,
+            players: [req.user._id] // GM is also a player
+        });
+        await campaign.save();
+        res.status(201).json(campaign);
+    } catch (error) {
+        res.status(400).json({ message: error.message });
+    }
+};
+
+exports.update = async (req, res) => {
+    try {
+        const campaign = await Campaign.findById(req.body.campaignId);
+        if (!campaign) {
+            return res.status(404).json({ message: 'Campaign not found' });
+        }
+        if (campaign.gm.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ message: 'Not authorized' });
+        }
+
+        campaign.name = req.body.name;
+        campaign.description = req.body.description;
+        campaign.lastModified = Date.now();
+        
+        await campaign.save();
+        res.json(campaign);
+    } catch (error) {
+        res.status(400).json({ message: error.message });
+    }
+};
+
+exports.delete = async (req, res) => {
+    try {
+        const campaign = await Campaign.findById(req.body.campaignId);
+        if (!campaign) {
+            return res.status(404).json({ message: 'Campaign not found' });
+        }
+        if (campaign.gm.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ message: 'Not authorized' });
+        }
+
+        await campaign.deleteOne();
+        res.json({ message: 'Campaign deleted' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+exports.join = async (req, res) => {
+    try {
+        const campaign = await Campaign.findById(req.body.campaignId);
+        if (!campaign) {
+            return res.status(404).json({ message: 'Campaign not found' });
+        }
+        
+        if (campaign.players.includes(req.user._id)) {
+            return res.status(400).json({ message: 'Already a member' });
+        }
+
+        campaign.players.push(req.user._id);
+        await campaign.save();
+        res.json(campaign);
+    } catch (error) {
+        res.status(400).json({ message: error.message });
+    }
+};

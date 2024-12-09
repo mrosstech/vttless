@@ -8,5 +8,6 @@ router.get('/list', passport.authenticate('jwt', {session: false}), Campaigns.li
 router.post('/add', passport.authenticate('jwt', {session: false}), Campaigns.add );
 router.post('/delete', passport.authenticate('jwt', {session: false}), Campaigns.delete);
 router.post('/update', passport.authenticate('jwt', {session: false}), Campaigns.update);
+router.post('/join', passport.authenticate('jwt', {session: false}), Campaigns.join);
 
 module.exports = router;

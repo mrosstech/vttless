@@ -1,131 +1,161 @@
-const { Friend, User, ExternalFriend } = require('../models');
+const { Friend, User } = require('../models');
 
 
-exports.add = async (req, res, next) => {
+exports.add = async (req, res) => {
     try {
         const { emails } = req.body;
-        const { user } = req;
-        let targetUser = null;
-        console.log('Adding user, got from body: ');
-        console.log(req.body);
-        // Lookup the email or the username based on what's provided
-        console.log(typeof emails);
-        if (emails && typeof emails == 'object') {
-            // Iterate through emails provided.
-            emails.forEach(async (email) => {
-                // Lookup by e-mail
-                console.log("Looking up by e-mail: " + email);
-                targetUser = await User.findOne({email: email});
+        const results = [];
 
-                console.log("Target user returned: ");
-                console.log(targetUser);
-                if (targetUser == null) {
-                    // No username or e-mail found.
-                    // Add an external friend entry
-                    console.log("No user found with this email or username");
-                    
-                    const newFriend = new Friend({
-                        requestor: user._id,
-                        confirmed: false,
-                        external: true,
-                        email: email
-                    });
-                    console.log("Saving external friend");
-                    // TODO: Add logic to send e-mail to unknown users to ask them to join.
-                    
-                    console.log("Sending e-mail for user to join");
-                    await newFriend.save();
-                    return;
-                }
-                const newFriend = new Friend({
-                    requestor: user._id, 
-                    requestee: targetUser._id, 
-                    confirmed: false,
-                    external: false
-                });
-                console.log("Saving new friend request!");
-                await newFriend.save();
+        for (const email of emails) {
+            // Find user by email
+            const requestee = await User.findOne({ email });
+            
+            if (!requestee) {
+                results.push({ email, status: 'not_found' });
+                continue;
+            }
+
+            // Check if friend request already exists
+            const existingRequest = await Friend.findOne({
+                $or: [
+                    { requestor: req.user._id, requestee: requestee._id },
+                    { requestor: requestee._id, requestee: req.user._id }
+                ]
             });
-            res.status(201).send({message: "Friend request submitted successfully!"});
-        }
-        
-    } catch (err) {
-        console.log(err);
-        res.status(500).send({error: "Error adding new friend request"});
-    }
-}
-exports.unconfirmed = async (req, res, next) => {
-    try {
-        const {user} = req;
-        const friends = await Friend.find({ $and: [ {"requestee": user._id}, {"confirmed": false} ] } );
-        res.status(200).send(friends);
-    } catch (err) {
-        console.log(err);
-        res.status(500).send({error: "Error getting unconfirmed friend requests"});
-    }
-}
 
-exports.confirm = async (req, res, next) => {
-    try {
-        const {user} = req;
-        const {id} = req.body;
-        updateResult = await Friend.updateOne(
-            { $and: [{_id: id}, {requestee: user._id}]},
-            {
-                $set: { confirmed: true},
-                $currentDate: { lastModified: true}
+            if (existingRequest) {
+                results.push({ email, status: 'already_exists' });
+                continue;
             }
-        );
-        if (updateResult.matchedCount == 1 && updateResult.modifiedCount == 1) {
-            console.log("Friend request confirmed successfully");
-            res.status(201).send({message: "Friend request updated successfully"});
-        } else {
-            console.log("No friend request to update");
-            res.status(400).send({message: "No friend request to update"});
-        }
-    } catch (err) {
-        console.log(err);
-        res.status(500).send({error: "Error updating friend requests"});
-    }
-}
 
-exports.delete = async (req, res, next) => {
-    try {
-        const {user} = req;
-        const {id} = req.body;
-        deleteResult = await Friend.deleteOne( {$and: [{_id: id}, {requestee: user._id}]});
-        if (deleteResult.deletedCount > 0) {
-            console.log("Friend request deleted!");
-            res.status(201).send({message: "Friend request deleted successfully"});
-        } else {
-            console.log("Friend request not found");
-            res.status(400).send({error: "Friend request not found"});
+            // Create new friend request
+            const friendRequest = new Friend({
+                requestor: req.user._id,
+                requestee: requestee._id
+            });
+
+            await friendRequest.save();
+            results.push({ email, status: 'success' });
         }
-    } catch (err) {
-        console.log(err);
-        res.status(500).send({error: "Error removing friend request"});
+
+        res.status(201).json({ results });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
     }
-}
-exports.list = async (req, res, next) => {
+};
+
+exports.list = async (req, res) => {
     try {
-        const {user} = req;
-        const returnFriends = [];
-        const friends = await Friend.find({ $and: [ {$or: [{"requestee": user._id}, {"requestor": user._id}]}, {"confirmed": true} ] } );
-   
-        for await (const friend of friends) {
-            if (friend.requestee.equals(user._id)) {
-                findResult = await User.findOne({_id: friend.requestor});
-            } else {
-                findResult = await User.findOne({_id: friend.requestee});
-            }
-            returnFriends.push({_id: findResult._id, username: findResult.username});
-        };
-        console.log('Friends listed successfully');
-        res.status(200).send(returnFriends);
-    
-        
-    } catch (err) {
-        console.log(err);
-        res.status(500).send({error: "Error listing friends"});
+        // Find all confirmed friendships where user is either requestor or requestee
+        const friends = await Friend.find({
+            $and: [
+                {
+                    $or: [
+                        { requestor: req.user._id },
+                        { requestee: req.user._id }
+                    ]
+                },
+                { confirmed: true }
+            ]
+        })
+        .populate('requestor', 'username email')
+        .populate('requestee', 'username email');
+
+        // Format the response to only include friend's information
+        const formattedFriends = friends.map(friendship => {
+            const friend = friendship.requestor._id.equals(req.user._id) 
+                ? friendship.requestee 
+                : friendship.requestor;
+            return {
+                _id: friend._id,
+                username: friend.username,
+                email: friend.email
+            };
+        });
+
+        res.json(formattedFriends);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
     }
-}
+};
+
+exports.pending = async (req, res) => {
+    try {
+        // Find pending friend requests sent to the user
+        const pendingRequests = await Friend.find({
+            requestee: req.user._id,
+            confirmed: false
+        })
+        .populate('requestor', 'username email');
+
+        res.json(pendingRequests);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+exports.confirm = async (req, res) => {
+    try {
+        const { requestId } = req.body;
+        
+        const friendRequest = await Friend.findOne({
+            _id: requestId,
+            requestee: req.user._id,
+            confirmed: false
+        });
+
+        if (!friendRequest) {
+            return res.status(404).json({ message: 'Friend request not found' });
+        }
+
+        friendRequest.confirmed = true;
+        friendRequest.lastModified = Date.now();
+        await friendRequest.save();
+
+        res.json({ message: 'Friend request confirmed' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+exports.reject = async (req, res) => {
+    try {
+        const { requestId } = req.body;
+        
+        const result = await Friend.deleteOne({
+            _id: requestId,
+            requestee: req.user._id,
+            confirmed: false
+        });
+
+        if (result.deletedCount === 0) {
+            return res.status(404).json({ message: 'Friend request not found' });
+        }
+
+        res.json({ message: 'Friend request rejected' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+exports.remove = async (req, res) => {
+    try {
+        const { friendId } = req.body;
+        
+        const result = await Friend.deleteOne({
+            $or: [
+                { requestor: req.user._id, requestee: friendId },
+                { requestor: friendId, requestee: req.user._id }
+            ],
+            confirmed: true
+        });
+
+        if (result.deletedCount === 0) {
+            return res.status(404).json({ message: 'Friendship not found' });
+        }
+
+        res.json({ message: 'Friend removed' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
