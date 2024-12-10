@@ -31,7 +31,9 @@ const campaignSchema = new mongoose.Schema({
         type: String,
         enum: ['active', 'archived', 'completed'],
         default: 'active'
-    }
+    },
+    activeMap: { type: mongoose.Schema.Types.ObjectId, ref: 'Map' },
+    maps: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Map' }]
 });
 
 module.exports = mongoose.model('Campaign', campaignSchema);

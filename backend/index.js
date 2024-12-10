@@ -35,6 +35,9 @@ app.use("/friends", friendsRoute);
 const imagesRoute = require("./routes/images");
 app.use("/images", imagesRoute);
 
+const assetsRoute = require("./routes/assets");
+app.use("/assets", assetsRoute);
+
 app.listen(serverPort, ()=>{
     console.log("Server is listening on port " + serverPort);
 })

@@ -141,3 +141,38 @@ exports.join = async (req, res) => {
         res.status(400).json({ message: error.message });
     }
 };
+
+exports.get = async (req, res) => {
+    try {
+        console.log("Trying to find campaign with ID: " + req.params.id);
+        const campaign = await Campaign.findById(req.params.id)
+            .populate('gm', 'username email')
+            .populate('players', 'username email')
+            .populate({ 
+                path: 'activeMap',
+                populate: {
+                    path: 'tokens.ownerId',
+                    select: 'username email'
+                }
+            });
+
+        if (!campaign) {
+            return res.status(404).json({ message: 'Campaign not found' });
+        }
+
+        // Check if user has permission to access this campaign
+        const isGM = campaign.gm._id.toString() === req.user.id.toString();
+        const isPlayer = campaign.players.some(player => 
+            player._id.toString() === req.user.id.toString()
+        );
+
+        if (!isGM && !isPlayer) {
+            return res.status(403).json({ message: 'Access denied' });
+        }
+
+        res.json(campaign);
+    } catch (error) {
+        console.error('Error fetching campaign:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};

@@ -9,5 +9,6 @@ router.post('/add', passport.authenticate('jwt', {session: false}), Campaigns.ad
 router.post('/delete', passport.authenticate('jwt', {session: false}), Campaigns.delete);
 router.post('/update', passport.authenticate('jwt', {session: false}), Campaigns.update);
 router.post('/join', passport.authenticate('jwt', {session: false}), Campaigns.join);
+router.get('/:id', passport.authenticate('jwt', {session: false}), Campaigns.get);
 
 module.exports = router;
