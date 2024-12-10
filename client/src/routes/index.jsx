@@ -8,7 +8,7 @@ import Signup from "../components/Signup.jsx";
 import Friends from "../components/Friends";
 import Campaigns from "../components/Campaigns";
 import NavBar from '../components/Navbar';
-import Play from '../components/Play';
+import Play from '../components/Play2';
 import Profile from '../components/Profile';
 
 const Routes = () => {

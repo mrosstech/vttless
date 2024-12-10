@@ -71,6 +71,7 @@ const Play = (props) => {
     const gridRef = useRef(null);
     const tokenRef = useRef(null);
     let originRef = useRef(null);
+    const dragStartRef = useRef({x: 0, y: 0});
 
     // We're going to need a few things here:
     //      - Token array:
@@ -81,6 +82,7 @@ const Play = (props) => {
 
 
     const drawGrid = ctx => {
+        console.log("drawing grid...");
         const scaledGridSize = gridSize * zoomLevel;
         ctx.width = scaledGridSize * gridWidth;
         ctx.height = scaledGridSize * gridHeight;
@@ -99,8 +101,10 @@ const Play = (props) => {
         }
     }
     const getOffset = (el) => {
+        console.log("Getting offset...");
         const rect = el.getBoundingClientRect();
         setOffsets({x: rect.left + window.scrollX, y: rect.top + window.scrollY});
+        console.log("offsets: " + JSON.stringify(offsets));
         return {
             left: rect.left + window.scrollX,
             top: rect.top + window.scrollY
@@ -108,6 +112,7 @@ const Play = (props) => {
     }
 
     const drawTokens = ctx => {
+        console.log("drawing tokens...");
         const scaledGridSize = gridSize * zoomLevel;
         ctx.width = scaledGridSize * gridWidth;
         ctx.height = scaledGridSize * gridHeight;
@@ -141,8 +146,11 @@ const Play = (props) => {
         // Find the nearest grid crossing to the x, y coordinates given
         // First get the nearest x coordinate
         const scaledGridSize = gridSize * zoomLevel;
+        console.log("Finding snap point...");
+        console.log("x: " + x + " y: " + y + " scaledGridSize: " + scaledGridSize);
         const nearestX = gridSize * Math.floor((x - offsets.x)/scaledGridSize) ;
         const nearestY = gridSize * Math.floor((y - offsets.y)/scaledGridSize) ;
+        console.log("nearestX: " + nearestX + " nearestY: " + nearestY);
 
         return {x: nearestX, y: nearestY}
     }
@@ -188,7 +196,8 @@ const Play = (props) => {
             initTokens[selectedToken.current].usedBy.forEach((playerID) => {
                 if (playerID === user.user.id) {
                     console.log("You can move this.");
-                    setDragStart({x: e.pageX, y: e.pageY});
+                    //setDragStart({x: e.pageX, y: e.pageY});
+                    dragStartRef.current = {x: e.pageX, y: e.pageY};
                     originRef.current = {x: e.pageX, y: e.pageY};
                     setIsDragging(true);
                     return;
@@ -205,10 +214,13 @@ const Play = (props) => {
             return;
         }
         if (isDragging) {
-            const dx = (e.pageX - dragStart.x) / zoomLevel;
-            const dy = (e.pageY - dragStart.y) / zoomLevel;
+            const dx = (e.pageX - dragStartRef.x) / zoomLevel;
+            const dy = (e.pageY - dragStartRef.y) / zoomLevel;
             updateTokenPositionRelative(dx, dy, selectedToken.current);
-            setDragStart({x: e.pageX, y: e.pageY});
+            //tokenRef.current.style.transform = `translate(${dx}px, ${dy}px)`;
+            //setDragStart({x: e.pageX, y: e.pageY});
+            dragStartRef.current = {x: e.pageX, y: e.pageY};
+            //tokenRef.current.style.transform = `matrix(${zoomLevel}, 0, 0, ${zoomLevel}, ${x}, ${y})`;
         }
     }
 
@@ -218,8 +230,12 @@ const Play = (props) => {
         //console.debug(e);
         // Check to see if the move was just a token select.
         if (isDragging && !tokenSelectCheck(e.pageX, e.pageY)) {
+            console.log("Mouse button let go");
             setIsDragging(false);
+            console.log("Setting is dragging to false");
             const newPos = findSnapPoint(e.pageX, e.pageY);
+            console.log("E position: " + e.pageX + ", " + e.pageY);
+            console.log("New position: " + newPos.x + ", " + newPos.y);
             updateTokenPositionAbsolute(newPos.x, newPos.y, selectedToken.current, false);
         } else if (isDragging && tokenSelectCheck(e.pageX, e.pageY)) {
             // TODO: Create token select function to mark token as selected and draw the token select graphics around it.
