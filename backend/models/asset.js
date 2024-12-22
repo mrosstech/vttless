@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const assetSchema = new mongoose.Schema({
     name: String,
-    type: { type: String, enum: ['token', 'background', 'other'] },
+    type: { type: String, enum: ['token', 'background', 'map', 'other'] },
     key: String, // S3 key instead of URL
     status: { type: String, enum: ['pending', 'active', 'deleted'], default: 'pending' },
     campaign: { type: mongoose.Schema.Types.ObjectId, ref: 'Campaign' },

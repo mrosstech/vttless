@@ -38,6 +38,9 @@ app.use("/images", imagesRoute);
 const assetsRoute = require("./routes/assets");
 app.use("/assets", assetsRoute);
 
+const mapsRoute = require("./routes/maps");
+app.use("/maps", mapsRoute);
+
 app.listen(serverPort, ()=>{
     console.log("Server is listening on port " + serverPort);
 })

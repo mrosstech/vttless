@@ -68,6 +68,8 @@ const Play2 = ({ campaignId = "65bafae0a5bd31adf435d512" }) => {
     const initializeGameState = async (mapData) => {
         // Load background image if exists
         if (mapData.backgroundImage?.assetId) {
+            console.log('Loading background image');
+            console.log(mapData.backgroundImage.assetId);
             try {
                 const imageUrl = await loadAssetUrl(mapData.backgroundImage.assetId);
                 const img = new Image();

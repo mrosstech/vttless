@@ -7,9 +7,10 @@ import {
     Tabs, TabList, TabPanels, Tab, TabPanel,
     Heading, Text
 } from '@chakra-ui/react';
-import { FiPlus, FiEdit, FiTrash2, FiUsers } from 'react-icons/fi';
+import { FiPlus, FiEdit, FiTrash2, FiUsers, FiMap } from 'react-icons/fi';
 import { FaPlay } from 'react-icons/fa';
 import CampaignEdit from './CampaignEdit';
+import MapSidebar from './MapSidebar';
 import { useAuth } from '../providers/AuthProvider';
 import { api } from '../common/axiosPrivate.js';
 import { useNavigate } from 'react-router-dom';
@@ -192,7 +193,10 @@ const CampaignList = () => {
 };
 
 // Separate component for the campaign table
-const CampaignTable = ({ campaigns, isGM, isPlayer, onEdit, onDelete, onJoin, onPlayClick, currentUserId, showJoinButton }) => {
+const CampaignTable = ({ campaigns, isGM, ...props }) => {
+    const [mapDrawerOpen, setMapDrawerOpen] = useState(false);
+    const [selectedCampaign, setSelectedCampaign] = useState(null);
+
     if (campaigns.length === 0) {
         return (
             <Box textAlign="center" py={4}>
@@ -201,78 +205,102 @@ const CampaignTable = ({ campaigns, isGM, isPlayer, onEdit, onDelete, onJoin, on
         );
     }
 
+    const dummyCallback = () => {};
+
     return (
-        <TableContainer>
-            <Table variant="simple">
-                <Thead>
-                    <Tr>
-                        <Th>Name</Th>
-                        <Th>Description</Th>
-                        <Th>GM</Th>
-                        <Th>Players</Th>
-                        <Th>Actions</Th>
-                    </Tr>
-                </Thead>
-                <Tbody>
-                    {campaigns.map((campaign) => (
-                        <Tr key={campaign._id}>
-                            <Td>{campaign.name}</Td>
-                            <Td>{campaign.description}</Td>
-                            <Td>{campaign.gm.username}</Td>
-                            <Td>{campaign.players.length}</Td>
-                            <Td>
-                                {isGM ? (
-                                    <>
-                                        <IconButton
-                                            icon={<FiEdit />}
-                                            onClick={() => onEdit(campaign)}
-                                            mr={2}
-                                            colorScheme="orange"
-                                            variant="outline"
-                                            aria-label="Edit campaign"
-                                        />
-                                        <IconButton
-                                            icon={<FiTrash2 />}
-                                            onClick={() => onDelete(campaign._id)}
-                                            mr={2}
-                                            colorScheme="red"
-                                            variant="outline"
-                                            aria-label="Delete campaign"
-                                        />
+        <>
+            <TableContainer>
+                <Table variant="simple">
+                    <Thead>
+                        <Tr>
+                            <Th>Name</Th>
+                            <Th>Description</Th>
+                            <Th>GM</Th>
+                            <Th>Players</Th>
+                            <Th>Actions</Th>
+                        </Tr>
+                    </Thead>
+                    <Tbody>
+                        {campaigns.map((campaign) => (
+                            <Tr key={campaign._id}>
+                                <Td>{campaign.name}</Td>
+                                <Td>{campaign.description}</Td>
+                                <Td>{campaign.gm.username}</Td>
+                                <Td>{campaign.players.length}</Td>
+                                <Td>
+                                    {isGM && (
+                                            <IconButton
+                                                icon={<FiMap />}
+                                                aria-label="Manage Maps"
+                                                mr={2}
+                                                onClick={() => {
+                                                    setSelectedCampaign(campaign);
+                                                    setMapDrawerOpen(true);
+                                                }}
+                                            />
+                                        )}
+                                    {isGM ? (
+                                        <>
+                                            <IconButton
+                                                icon={<FiEdit />}
+                                                onClick={() => props.onEdit(campaign)}
+                                                mr={2}
+                                                colorScheme="orange"
+                                                variant="outline"
+                                                aria-label="Edit campaign"
+                                            />
+                                            <IconButton
+                                                icon={<FiTrash2 />}
+                                                onClick={() => props.onDelete(campaign._id)}
+                                                mr={2}
+                                                colorScheme="red"
+                                                variant="outline"
+                                                aria-label="Delete campaign"
+                                            />
+                                            <IconButton 
+                                                icon={<FaPlay />}
+                                                onClick={() => props.onPlayClick(campaign._id)}
+                                                colorScheme="green"
+                                                variant="outline"
+                                                aria-label="Play Campaign"
+                                            />
+                                        </>
+                                    ) : props.isPlayer ? (
                                         <IconButton 
                                             icon={<FaPlay />}
-                                            onClick={() => onPlayClick(campaign._id)}
+                                            onClick={() => props.onPlayClick(campaign._id)}
                                             colorScheme="green"
                                             variant="outline"
                                             aria-label="Play Campaign"
                                         />
-                                    </>
-                                ) : isPlayer ? (
-                                    <IconButton 
-                                        icon={<FaPlay />}
-                                        onClick={() => onPlayClick(campaign._id)}
-                                        colorScheme="green"
-                                        variant="outline"
-                                        aria-label="Play Campaign"
-                                    />
-                                    ) :
-                                
-                                    showJoinButton && (
-                                    <Button
-                                        onClick={() => onJoin(campaign._id)}
-                                        colorScheme="orange"
-                                        variant="outline"
-                                        leftIcon={<FiUsers />}
-                                    >
-                                        Join Campaign
-                                    </Button>
-                                )}
-                            </Td>
-                        </Tr>
-                    ))}
-                </Tbody>
-            </Table>
-        </TableContainer>
+                                        ) :
+                                    
+                                        props.showJoinButton && (
+                                        <Button
+                                            onClick={() => props.onJoin(campaign._id)}
+                                            colorScheme="orange"
+                                            variant="outline"
+                                            leftIcon={<FiUsers />}
+                                        >
+                                            Join Campaign
+                                        </Button>
+                                    )}
+                                </Td>
+                            </Tr>
+                        ))}
+                    </Tbody>
+                </Table>
+            </TableContainer>
+            {selectedCampaign && (
+                <MapSidebar
+                    isOpen={mapDrawerOpen}
+                    onClose={() => setMapDrawerOpen(false)}
+                    campaign={selectedCampaign}
+                    onMapAdd={dummyCallback}
+                    isGM={isGM}
+                />
+            )}
+        </>
     );
 };
 

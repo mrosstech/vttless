@@ -49,6 +49,7 @@ exports.list = async (req, res) => {
         })
         .populate('gm', 'username')
         .populate('players', 'username')
+        .populate('maps')
         .sort({ created: -1 }); // Most recent first
 
         console.log("Campaigns: " + campaigns);
@@ -174,5 +175,32 @@ exports.get = async (req, res) => {
     } catch (error) {
         console.error('Error fetching campaign:', error);
         res.status(500).json({ message: 'Server error' });
+    }
+};
+
+exports.addMap = async (req, res) => {
+    try {
+        const campaign = await Campaign.findById(req.params.campaignId);
+        if (!campaign) {
+            return res.status(404).json({ message: 'Campaign not found' });
+        }
+        
+        // Check if the user is the GM
+        if (campaign.gm.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ message: 'Only the GM can add maps' });
+        }
+
+        // Add the new map ID to the campaign's maps array
+        campaign.maps.push(req.body.mapId);
+        
+        // If this is the first map, set it as active
+        if (!campaign.activeMap) {
+            campaign.activeMap = req.body.mapId;
+        }
+
+        await campaign.save();
+        res.status(200).json(campaign);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
     }
 };

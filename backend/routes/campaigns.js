@@ -10,5 +10,6 @@ router.post('/delete', passport.authenticate('jwt', {session: false}), Campaigns
 router.post('/update', passport.authenticate('jwt', {session: false}), Campaigns.update);
 router.post('/join', passport.authenticate('jwt', {session: false}), Campaigns.join);
 router.get('/:id', passport.authenticate('jwt', {session: false}), Campaigns.get);
+router.post('/:campaignId/maps', passport.authenticate('jwt', {session: false}), Campaigns.addMap);
 
 module.exports = router;

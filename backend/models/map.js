@@ -3,6 +3,8 @@ const mongoose = require('mongoose');
 const mapSchema = new mongoose.Schema({
     name: { type: String, required: true },
     campaign: { type: mongoose.Schema.Types.ObjectId, ref: 'Campaign' },
+    gridWidth: { type: Number, default: 10, required: true },
+    gridHeight: { type: Number, default: 10, required: true},
     backgroundImage: {
         assetId: { type: mongoose.Schema.Types.ObjectId, ref: 'Asset' },
         position: {
