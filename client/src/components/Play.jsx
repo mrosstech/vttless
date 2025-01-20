@@ -47,13 +47,14 @@ const Play = () => {
             try {
                 const response = await axiosPrivate.get(`/campaigns/${campaignId}`);
                 setCampaign(response.data);
+                console.log(response.data);
                 
                 if (response.data.activeMap) {
-                    const mapResponse = await axiosPrivate.get(`/maps/${response.data.activeMap}`);
-                    setCurrentMap(mapResponse.data);
+                    //const mapResponse = await axiosPrivate.get(`/maps/${response.data.activeMap}`);
+                    setCurrentMap(response.data.activeMap);
                     
                     // Initialize game state from map data
-                    await initializeGameState(mapResponse.data);
+                    await initializeGameState(response.data.activeMap);
                 }
             } catch (error) {
                 toast({
@@ -68,7 +69,8 @@ const Play = () => {
     }, [campaignId]);
 
     const initializeGameState = async (mapData) => {
-        // Load background image if exists
+        // Load background image for current map if exists
+        console.log('Initializing game state');
         if (mapData.backgroundImage?.assetId) {
             console.log('Loading background image');
             console.log(mapData.backgroundImage.assetId);
