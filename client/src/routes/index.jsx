@@ -8,7 +8,7 @@ import Signup from "../components/Signup.jsx";
 import Friends from "../components/Friends";
 import Campaigns from "../components/Campaigns";
 import NavBar from '../components/Navbar';
-import Play from '../components/Play2';
+import Play from '../components/Play.jsx';
 import Profile from '../components/Profile';
 
 const Routes = () => {
@@ -75,9 +75,10 @@ const Routes = () => {
             element: <ProtectedRoute />,
             children: [
                 {
-                    path: "/play",
+                    path: "/play/:campaignId",
                     element: <Play />
                 }
+
                 
             ]
         }

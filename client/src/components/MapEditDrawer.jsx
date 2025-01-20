@@ -17,18 +17,27 @@ import {
     VStack,
     Box,
     Text,
-    useToast
+    useToast,
+    Spinner
 } from '@chakra-ui/react';
 import { api } from '../common/axiosPrivate';
 import { uploadAsset, loadAssetUrl } from '../utils/assetUtils';
 
 const MapEditDrawer = ({ isOpen, onClose, map, onMapUpdate }) => {
-    const [mapData, setMapData] = useState(map || {});
+    const [mapData, setMapData] = useState({
+        name: '',
+        gridSettings: {
+            size: 50
+        },
+        backgroundImage: null
+    }
+    );
     const [isDragging, setIsDragging] = useState(false);
     const toast = useToast();
 
     useEffect(() => {
-        if (map) {
+        if (map != null && isOpen) {
+            console.log(map);
             setMapData(map);
         }
     }, [map, isOpen]);
@@ -49,7 +58,7 @@ const MapEditDrawer = ({ isOpen, onClose, map, onMapUpdate }) => {
             
             await api.patch(`/maps/${map._id}`, {
                 backgroundImage: {
-                    url: imageUrl,
+                    assetId: assetId,
                     position: { x: 0, y: 0 }
                 }
             });
@@ -58,6 +67,7 @@ const MapEditDrawer = ({ isOpen, onClose, map, onMapUpdate }) => {
                 ...prev,
                 backgroundImage: {
                     url: imageUrl,
+                    assetId: assetId,
                     position: { x: 0, y: 0 }
                 }
             }));
@@ -103,6 +113,7 @@ const MapEditDrawer = ({ isOpen, onClose, map, onMapUpdate }) => {
             setMapData(updatedData);
             onMapUpdate();
         } catch (error) {
+            console.error('Error updating map:', error);
             toast({
                 title: "Error updating map",
                 description: error.message,

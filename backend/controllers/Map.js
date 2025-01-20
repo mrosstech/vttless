@@ -99,7 +99,7 @@ exports.updateMap = async (req, res) => {
             return res.status(403).json({ message: "Only the GM can update maps" });
         }
 
-        const allowedUpdates = ['name', 'gridWidth', 'gridHeight', 'gridSettings'];
+        const allowedUpdates = ['name', 'gridWidth', 'gridHeight', 'gridSettings', 'backgroundImage'];
         const updates = Object.keys(req.body)
             .filter(key => allowedUpdates.includes(key))
             .reduce((obj, key) => {

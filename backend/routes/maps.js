@@ -10,5 +10,5 @@ router.get('/:id', passport.authenticate('jwt', {session: false}), mapController
 router.put('/:id', passport.authenticate('jwt', {session: false}), mapController.updateMap);
 router.delete('/:id', passport.authenticate('jwt', {session: false}), mapController.deleteMap);
 router.get('/campaign/:campaignId', passport.authenticate('jwt', {session: false}), mapController.getCampaignMaps);
-
+router.patch('/:id', passport.authenticate('jwt', {session: false}), mapController.updateMap);
 module.exports = router;
