@@ -270,41 +270,10 @@ def find_grid_spacing(image_array, min_grid_size=20):
     num_rows = max(1, int(processed_image.shape[0] / row_spacing)) if row_spacing > 0 else 1
     num_cols = max(1, int(processed_image.shape[1] / col_spacing)) if col_spacing > 0 else 1
     
-    # Debug visualization
-    plt.figure(figsize=(15, 10))
+    # Only plot if specified on the command line
+    if len(sys.argv) > 2 and sys.argv[2] == '--plot':
+        visualize_preprocessing_steps(image_array, processed_image)
     
-    # Plot 1: Original image with detected grid lines
-    plt.subplot(2, 2, 1)
-    plt.imshow(processed_image, cmap='gray')
-    for y in row_lines:
-        plt.axhline(y, color='red', linewidth=0.5, alpha=0.5)
-    for x in col_lines:
-        plt.axvline(x, color='blue', linewidth=0.5, alpha=0.5)
-    plt.title(f"Detected Grid Lines (threshold={threshold_ratio:.2f})")
-    
-    # Plot 2: Edge magnitude
-    plt.subplot(2, 2, 2)
-    plt.imshow(edge_magnitude, cmap='hot')
-    plt.title("Edge Magnitude")
-    
-    # Plot 3: Row intensity profile
-    plt.subplot(2, 2, 3)
-    row_sums = np.sum(edge_magnitude, axis=1)
-    row_sums = (row_sums - np.min(row_sums)) / (np.max(row_sums) - np.min(row_sums))
-    plt.plot(row_sums)
-    plt.title("Row Intensity Profile")
-    plt.axhline(y=threshold_ratio, color='r', linestyle='--')
-    
-    # Plot 4: Column intensity profile
-    plt.subplot(2, 2, 4)
-    col_sums = np.sum(edge_magnitude, axis=0)
-    col_sums = (col_sums - np.min(col_sums)) / (np.max(col_sums) - np.min(col_sums))
-    plt.plot(col_sums)
-    plt.title("Column Intensity Profile")
-    plt.axhline(y=threshold_ratio, color='r', linestyle='--')
-    
-    plt.tight_layout()
-    plt.show()
     
     return row_spacing, col_spacing, row_lines, col_lines, num_rows, num_cols
 
