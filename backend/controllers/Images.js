@@ -6,7 +6,11 @@ const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
 const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
 const awsRegion = process.env.AWS_REGION;
 const s3Client = new S3Client({
-    profile: 'spigotprofile',
+    region: awsRegion,
+    credentials: {
+        accessKeyId,
+        secretAccessKey
+    }
 });
 
 exports.getProfilePhotoUploadUrl = async (req, res) => {
@@ -16,14 +20,15 @@ exports.getProfilePhotoUploadUrl = async (req, res) => {
         const fileExtension = '.jpeg'; // You might want to make this dynamic based on file type
         const fileName = `${userId}/profile/${crypto.randomBytes(16).toString('hex')}${fileExtension}`;
         console.log("File name: ", fileName)
+        const environment = process.env.NODE_ENV || 'development';
         const command = new PutObjectCommand({
             Bucket: process.env.AWS_S3_BUCKET_NAME,
-            Key: `profiles/${fileName}`,
+            Key: `${environment}/profiles/${fileName}`,
             ContentType: 'image/jpeg', // Make this dynamic based on file type
         });
 
         const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
-        const photoUrl = `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/profiles/${fileName}`;
+        const photoUrl = `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${environment}/profiles/${fileName}`;
         console.log("Photo URL: " + photoUrl)
         console.log("Upload URL: " + uploadUrl)
         res.json({

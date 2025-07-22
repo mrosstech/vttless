@@ -3,7 +3,9 @@ const AWS = require('aws-sdk');
 const Asset = require('../models/asset');
 
 const s3 = new AWS.S3({
-    profile: 'spigotprofile',
+    region: process.env.AWS_REGION,
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
 });
 
 exports.getUploadUrl = async (req, res) => {
@@ -11,7 +13,8 @@ exports.getUploadUrl = async (req, res) => {
     try {
         const { fileName, fileType, assetType, campaignId } = req.body;
         
-        const key = `campaigns/${campaignId}/${assetType}/${Date.now()}-${fileName}`;
+        const environment = process.env.NODE_ENV || 'development';
+        const key = `${environment}/campaigns/${campaignId}/${assetType}/${Date.now()}-${fileName}`;
         
         const params = {
             Bucket: process.env.AWS_S3_BUCKET_NAME,
