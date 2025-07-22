@@ -2,7 +2,7 @@
 const zxcvbn = require('zxcvbn'); // Add this package for password strength estimation
 
 const passwordValidator = {
-    minLength: 8, // Increased from 8 for better security
+    minLength: 8,
     maxLength: 128,
     
     async validate(password, email = '', username = '') {
@@ -16,39 +16,10 @@ const passwordValidator = {
             errors.push(`Password must be less than ${this.maxLength} characters`);
         }
 
-        // Character type requirements
-        if (!/[A-Z]/.test(password)) {
-            errors.push('Password must contain at least one uppercase letter');
-        }
-        if (!/[a-z]/.test(password)) {
-            errors.push('Password must contain at least one lowercase letter');
-        }
-        if (!/\d/.test(password)) {
-            errors.push('Password must contain at least one number');
-        }
-        if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
-            errors.push('Password must contain at least one special character');
-        }
-
-        // // Check for repeating characters (e.g., 'aaa')
-        // if (/(.)\1{2,}/.test(password)) {
-        //     errors.push('Password cannot contain three or more repeating characters');
-        // }
-
-        // // Check for sequential characters
-        // if (/abc|bcd|cde|def|efg|fgh|ghi|hij|ijk|jkl|klm|lmn|mno|nop|opq|pqr|qrs|rst|stu|tuv|uvw|vwx|wxy|xyz|012|123|234|345|456|567|678|789/i.test(password)) {
-        //     errors.push('Password cannot contain sequential characters');
-        // }
-
-        // Check for keyboard patterns
-        // if (/qwert|asdfg|zxcvb/i.test(password)) {
-        //     errors.push('Password cannot contain keyboard patterns');
-        // }
-
-        // Use zxcvbn for additional strength checking
+        // Use zxcvbn for strength checking (more user-friendly than rigid rules)
         const strength = zxcvbn(password, [email, username]);
-        if (strength.score < 3) {
-            errors.push('Password is too weak. Try making it longer or more complex');
+        if (strength.score < 2) {
+            errors.push('Password is too weak. Try making it longer or adding more variety');
         }
 
         // Check if password contains personal information
