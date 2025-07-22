@@ -12,6 +12,11 @@ const io = new Server(httpServer, {
     }
  });
 
+// Health check endpoint
+app.get("/health", (req, res) => {
+    res.status(200).json({ status: "ok", service: "eventserver" });
+});
+
 
 const serverPort = 4001;
 

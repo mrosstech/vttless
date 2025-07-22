@@ -41,6 +41,11 @@ app.use("/assets", assetsRoute);
 const mapsRoute = require("./routes/maps");
 app.use("/maps", mapsRoute);
 
+// Health check endpoint
+app.get("/health", (req, res) => {
+    res.status(200).json({ status: "ok", service: "backend" });
+});
+
 app.listen(serverPort, ()=>{
     console.log("Server is listening on port " + serverPort);
 })
