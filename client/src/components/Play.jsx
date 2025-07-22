@@ -299,7 +299,7 @@ const Play = () => {
         const imageUrl = await loadAssetUrl(assetId);
         
         // Update map in database
-        await axiosPrivate.patch(`/api/maps/${currentMap._id}`, {
+        await axiosPrivate.patch(`/maps/${currentMap._id}`, {
             backgroundImage: {
                 url: imageUrl,
                 position: { x: 0, y: 0 }
