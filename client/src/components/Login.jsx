@@ -43,7 +43,6 @@ const Login = () => {
     } = useForm();
 
     function onSubmit(values) {
-        console.log("Handling submit for login form");
         return new Promise((resolve) => {
             setTimeout(() => {
                 alert(JSON.stringify(values, null, 2));
@@ -78,11 +77,7 @@ const Login = () => {
         //event.preventDefault();
 
         AuthService.login(values.username, values.password).then((res) => {
-            console.log("Login response: ");
-            console.log(res)
             setUser(res);
-            console.log("User set to: ");
-            console.log(user);
             navigate('/');
         }).catch( (err) => {
             showErrorToast();

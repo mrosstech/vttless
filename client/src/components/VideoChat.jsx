@@ -39,13 +39,6 @@ if (typeof window !== 'undefined') {
         window.clearImmediate = clearTimeout;
     }
     
-    // Debug: Verify polyfills are working
-    console.log('Polyfill check:', {
-        hasProcess: !!window.process,
-        hasBuffer: !!window.Buffer,
-        hasNextTick: !!window.process?.nextTick,
-        hasSetImmediate: !!window.setImmediate
-    });
 }
 
 const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isRightSidebar = false }) => {
@@ -89,10 +82,6 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
 
     // Create peer connection for new user
     const createPeer = useCallback((userToSignal, stream, isInitiator) => {
-        console.log('Creating peer connection:', { userToSignal, isInitiator, hasStream: !!stream });
-        if (stream) {
-            console.log('Stream tracks for peer creation:', stream.getTracks());
-        }
         
         const peer = new Peer({
             initiator: isInitiator,
@@ -112,7 +101,6 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
         });
 
         peer.on('stream', remoteStream => {
-            console.log('Received remote stream from:', userToSignal, 'Stream tracks:', remoteStream.getTracks());
             setPeers(prevPeers => ({
                 ...prevPeers,
                 [userToSignal]: {
@@ -164,13 +152,8 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
             // Now join the call with the stream
             setIsInCall(true);
             
-            console.log('Emitting user-joined-video event:', { campaignId, userId, userName });
-            console.log('Local stream tracks:', stream.getTracks());
-            console.log('Socket connected:', socket.connected, 'Socket ID:', socket.id);
-            
             // Ensure socket is connected before emitting
             if (!socket.connected) {
-                console.warn('Socket not connected, waiting...');
                 socket.connect();
                 await new Promise(resolve => {
                     if (socket.connected) {
@@ -179,7 +162,6 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                         socket.on('connect', resolve);
                     }
                 });
-                console.log('Socket now connected:', socket.id);
             }
             
             // Re-join campaign to ensure we're in the right room
@@ -311,33 +293,13 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
     // Socket event listeners
     useEffect(() => {
         if (!socket || !isInCall) {
-            console.log('Socket event listeners not set up:', { hasSocket: !!socket, isInCall });
             return;
         }
-        
-        console.log('Setting up socket event listeners for campaign:', campaignId);
-
-        // Test socket connectivity by emitting a test event
-        socket.emit('test-event', { campaignId, userId, message: 'Testing socket connectivity' });
-
-        // Debug: Log all socket events
-        const originalEmit = socket.emit;
-        const originalOn = socket.on;
-        
-        // Override emit to log outgoing events
-        socket.emit = (...args) => {
-            if (args[0].includes('webrtc') || args[0].includes('video')) {
-                console.log('SOCKET EMIT:', args[0], args[1]);
-            }
-            return originalEmit.apply(socket, args);
-        };
 
         const handleUserJoinedVideo = ({ userId: joinedUserId, userName: joinedUserName }) => {
-            console.log('Received user-joined-video event:', { joinedUserId, joinedUserName, currentUserId: userId });
             if (joinedUserId === userId) return; // Don't connect to self
 
             if (!peersRef.current[joinedUserId] && localStream) {
-                console.log('Creating peer connection for:', joinedUserId);
                 const peer = createPeer(joinedUserId, localStream, true);
                 peersRef.current[joinedUserId] = { peer, userName: joinedUserName };
                 
@@ -354,11 +316,9 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
         };
 
         const handleWebRTCOffer = ({ fromUserId, signal, userName: fromUserName }) => {
-            console.log('Received WebRTC offer from:', fromUserId, 'userName:', fromUserName);
             if (fromUserId === userId) return; // Ignore own offers
 
             if (!peersRef.current[fromUserId] && localStream) {
-                console.log('Creating peer for incoming offer from:', fromUserId);
                 const peer = createPeer(fromUserId, localStream, false);
                 peersRef.current[fromUserId] = { peer, userName: fromUserName };
                 
@@ -377,11 +337,8 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
         };
 
         const handleWebRTCAnswer = ({ fromUserId, signal }) => {
-            console.log('Received WebRTC answer from:', fromUserId);
             if (peersRef.current[fromUserId]) {
                 peersRef.current[fromUserId].peer.signal(signal);
-            } else {
-                console.warn('No peer found for answer from:', fromUserId);
             }
         };
 
@@ -403,10 +360,6 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
         socket.on('user-left-video', handleUserLeftVideo);
 
         return () => {
-            // Restore original socket methods
-            socket.emit = originalEmit;
-            socket.on = originalOn;
-            
             socket.off('user-joined-video', handleUserJoinedVideo);
             socket.off('webrtc-offer', handleWebRTCOffer);
             socket.off('webrtc-answer', handleWebRTCAnswer);

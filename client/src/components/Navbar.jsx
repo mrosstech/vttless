@@ -8,7 +8,6 @@ import {Outlet} from 'react-router-dom';
 
 // Utility function to handle profile photo URL caching
 const getProfilePhotoFromCache = () => {
-  console.log("getProfilePhotoFromCache");
   const cached = localStorage.getItem('profilePhotoUrl');
   if (cached) {
     const { url, expiry } = JSON.parse(cached);
@@ -27,7 +26,6 @@ const NavBar = (props) => {
     const toggle = () => setIsOpen(!isOpen);
     const user = useAuth();
     const fetchProfilePhoto = async () => {
-      console.log("fetchProfilePhoto");
       try {
         // First check cache
         const cachedUrl = getProfilePhotoFromCache();
@@ -56,8 +54,6 @@ const NavBar = (props) => {
       }
     }, [user]);
   
-    console.log("Navbar:");
-    console.log(props.user);
     return (
       <>
         <NavBarContainer {...props}>

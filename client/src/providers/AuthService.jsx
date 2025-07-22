@@ -11,18 +11,12 @@ const register = (username, email, password) => {
 }
 
 const login = (username, password) => {
-    console.log("Attempting login through AuthProvider");
-    console.log("Using username: " + username);
-    console.log("Using password: " + password);
     return api.post("/auth/login", {
         username,
         password,
     })
     .then((response) => {
-        console.log("Got response back from API for login");
-        console.log(response.data);
         if (response.data.user) {
-            console.log("Detected username so setting the user object");
             localStorage.setItem("vttless-user", JSON.stringify(response.data));
         }
 
@@ -31,7 +25,6 @@ const login = (username, password) => {
 }
 
 const logout = () => {
-    console.log("Removing local user data");
     localStorage.removeItem("vttless-user");
     
     return api.get("/auth/logout").then((response) => {
@@ -40,8 +33,6 @@ const logout = () => {
 }
 
 const getCurrentUser = () => {
-    console.log('AUTHSERVICE: Getting current user: ');
-    console.log(localStorage.getItem("vttless-user"));
     return JSON.parse(localStorage.getItem("vttless-user"));
 }
 

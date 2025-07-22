@@ -15,7 +15,6 @@ import axios from 'axios';
 
 // Utility function to handle profile photo URL caching
 const getProfilePhotoFromCache = () => {
-    console.log("getProfilePhotoFromCache");
     const cached = localStorage.getItem('profilePhotoUrl');
     if (cached) {
       const { url, expiry } = JSON.parse(cached);
@@ -65,7 +64,6 @@ const ProfilePhoto = ({ user }) => {
         }
     };
     const fetchProfilePhoto = async () => {
-        console.log("fetchProfilePhoto");
         try {
             // First check cache
             const cachedUrl = getProfilePhotoFromCache();
@@ -108,7 +106,7 @@ const ProfilePhoto = ({ user }) => {
                     }
                 }
             );
-            console.log('Presigned URL:', uploadUrl);
+            
             // Upload the file directly to S3
             await axios.put(uploadUrl, selectedFile, {
                 headers: {

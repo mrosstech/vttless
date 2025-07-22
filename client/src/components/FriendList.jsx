@@ -34,7 +34,7 @@ const FriendList = () => {
     // } 
 
     const removeFriend = (friend) => {
-        console.log("Friend removed");
+        // TODO: Implement friend removal functionality
     }
     useEffect(() => {
         // Get the users friends
@@ -43,8 +43,6 @@ const FriendList = () => {
             const res =  API.get("/friends/list", {
             }).then((res) => {
                 let listFriends = "";
-                console.log("Got friends data back");
-                console.log(res);
                 if (res.data.length === 0) {
                     listFriends = <Tr><Td>No Friends</Td><Td>Click here to add one!</Td></Tr>;
                 } else {
@@ -67,8 +65,6 @@ const FriendList = () => {
                   setError("user not logged in");
               }
           }
-        } else {
-          console.log("no user logged in");
         }
       }, [user]);
 

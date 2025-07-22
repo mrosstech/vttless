@@ -157,7 +157,7 @@ const MapSidebar = ({ isOpen, onClose, campaign, onMapAdd, isGM }) => {
         onOpen: onNewMapModalOpen,
         onClose: onNewMapModalClose
     } = useDisclosure();
-    console.log('campaign', campaign);
+    
     const handleCreateMap = async (mapData) => {
         setIsSubmitting(true);
         try {

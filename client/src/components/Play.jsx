@@ -99,7 +99,6 @@ const Play = () => {
             try {
                 const response = await axiosPrivate.get(`/campaigns/${campaignId}`);
                 setCampaign(response.data);
-                console.log(response.data);
                 
                 if (response.data.activeMap) {
                     //const mapResponse = await axiosPrivate.get(`/maps/${response.data.activeMap}`);
@@ -122,10 +121,7 @@ const Play = () => {
 
     const initializeGameState = async (mapData) => {
         // Load background image for current map if exists
-        console.log('Initializing game state');
         if (mapData.backgroundImage?.assetId) {
-            console.log('Loading background image');
-            console.log(mapData.backgroundImage.assetId);
             try {
                 const imageUrl = await loadAssetUrl(mapData.backgroundImage.assetId);
                 const img = new Image();
@@ -139,7 +135,6 @@ const Play = () => {
                 };
                 img.src = imageUrl;
             } catch (error) {
-                console.error('Error loading background:', error);
             }
         }
 
@@ -154,7 +149,6 @@ const Play = () => {
                 });
                 return { ...token, image: img };
             } catch (error) {
-                console.error('Error loading token:', error);
                 return token;
             }
         }));
@@ -223,7 +217,6 @@ const Play = () => {
                 `/assets/${assetId}/download-url`);
             return downloadUrl;
         } catch (error) {
-            console.error('Error loading asset:', error);
             throw error;
         }
     };
@@ -380,7 +373,6 @@ const Play = () => {
                 token: newToken
             });
         } catch (error) {
-            console.error('Token database update failed:', error);
             toast({
                 title: "Warning",
                 description: "Token added locally but may not be saved to database",
@@ -745,7 +737,6 @@ const Play = () => {
                     });
                 }
             } catch (error) {
-                console.error('Failed to save token position:', error);
                 toast({
                     title: "Warning",
                     description: "Token position may not be saved",
@@ -767,7 +758,6 @@ const Play = () => {
                     }
                 });
             } catch (error) {
-                console.error('Failed to save background position:', error);
                 toast({
                     title: "Warning",
                     description: "Background position may not be saved",
@@ -939,7 +929,6 @@ const Play = () => {
             const response = await axiosPrivate.get(`/maps/campaign/${campaignId}`);
             setCampaignMaps(response.data);
         } catch (error) {
-            console.error('Error loading campaign maps:', error);
             toast({
                 title: "Error loading maps",
                 description: "Failed to load campaign maps",
@@ -978,7 +967,6 @@ const Play = () => {
             setIsCreatingMap(false);
             await loadCampaignMaps();
         } catch (error) {
-            console.error('Error creating map:', error);
             toast({
                 title: "Error creating map",
                 description: error.response?.data?.message || "Failed to create map",
@@ -999,7 +987,6 @@ const Play = () => {
             // Reload the page to switch to the new map
             window.location.reload();
         } catch (error) {
-            console.error('Error switching map:', error);
             toast({
                 title: "Error switching map",
                 description: "Failed to switch to the selected map",
@@ -1044,7 +1031,6 @@ const Play = () => {
                 status: "success"
             });
         } catch (error) {
-            console.error('Error updating grid settings:', error);
             toast({
                 title: "Error updating grid settings",
                 description: "Failed to save grid settings",
@@ -1099,7 +1085,6 @@ const Play = () => {
                 status: "success"
             });
         } catch (error) {
-            console.error('Error updating token name:', error);
             toast({
                 title: "Error",
                 description: "Failed to update token name",

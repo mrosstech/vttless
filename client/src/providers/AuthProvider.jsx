@@ -4,7 +4,6 @@ import AuthService from './AuthService';
 const AuthContext = createContext();
 
 const AuthProvider = ({ children }) => {
-  console.log('Running Authprovider');
   // State to hold the user object
   const [user, setUser] = useState(AuthService.getCurrentUser());
 

@@ -37,7 +37,6 @@ const MapEditDrawer = ({ isOpen, onClose, map, onMapUpdate }) => {
 
     useEffect(() => {
         if (map != null && isOpen) {
-            console.log(map);
             setMapData(map);
         }
     }, [map, isOpen]);
@@ -113,7 +112,6 @@ const MapEditDrawer = ({ isOpen, onClose, map, onMapUpdate }) => {
             setMapData(updatedData);
             onMapUpdate();
         } catch (error) {
-            console.error('Error updating map:', error);
             toast({
                 title: "Error updating map",
                 description: error.message,

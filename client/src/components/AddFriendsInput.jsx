@@ -59,7 +59,6 @@ export const AddFriendsInput = ({ initialEmails = []}) => {
     }
 
     const handleEmailClick = () => {
-        console.log(emails);
         DataService.addFriendEmails(emails);
     }
 

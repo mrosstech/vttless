@@ -12,12 +12,10 @@ export const api = axios.create({
 });
 
 api.interceptors.response.use( (res) => {
-    console.log("Interceptor but nothings wrong");
     // if there was no error, then just return the response.
     return Promise.resolve(res);
 }, (error) => {
-    console.log(error);
-    console.log('Got a 401 response back. Axios automatically redirecting to login page');
+    // Handle 401 unauthorized errors
     // If there was error, do something
     if (error.response.status === 401) {
         //alert("Not logged in");
