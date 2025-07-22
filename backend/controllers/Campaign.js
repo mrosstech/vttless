@@ -96,8 +96,16 @@ exports.update = async (req, res) => {
             return res.status(403).json({ message: 'Not authorized' });
         }
 
-        campaign.name = req.body.name;
-        campaign.description = req.body.description;
+        // Update fields that are provided
+        if (req.body.name !== undefined) {
+            campaign.name = req.body.name;
+        }
+        if (req.body.description !== undefined) {
+            campaign.description = req.body.description;
+        }
+        if (req.body.activeMap !== undefined) {
+            campaign.activeMap = req.body.activeMap;
+        }
         campaign.lastModified = Date.now();
         
         await campaign.save();

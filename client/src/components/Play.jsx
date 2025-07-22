@@ -19,13 +19,22 @@ import {
     Avatar,
     IconButton,
     useDisclosure,
-    Input
+    Input,
+    NumberInput,
+    NumberInputField,
+    NumberInputStepper,
+    NumberIncrementStepper,
+    NumberDecrementStepper,
+    Switch,
+    FormControl,
+    FormLabel
 } from '@chakra-ui/react';
 import { HiMenu } from 'react-icons/hi';
-import { IoArrowBack } from 'react-icons/io5';
+import { IoArrowBack, IoChevronDown, IoChevronUp } from 'react-icons/io5';
 import { socket } from '../socket';
 import './Play.css';
 import axiosPrivate from '../utils/axiosPrivate';
+import VideoChat from './VideoChat';
 
 
 
@@ -59,7 +68,8 @@ const Play = () => {
         x: 0,
         y: 0,
         isDragging: false,
-        dragStart: { x: 0, y: 0 }
+        dragStart: { x: 0, y: 0 },
+        startPosition: { x: 0, y: 0 }
     });
     const [dragState, setDragState] = useState({
         isDragOver: false,
@@ -67,6 +77,20 @@ const Play = () => {
     });
     const [editingToken, setEditingToken] = useState(null);
     const [editingName, setEditingName] = useState('');
+    const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+    const [campaignMaps, setCampaignMaps] = useState([]);
+    const [isCreatingMap, setIsCreatingMap] = useState(false);
+    const [newMapName, setNewMapName] = useState('');
+    const [isMapSectionCollapsed, setIsMapSectionCollapsed] = useState(false);
+    const [isCharacterSectionCollapsed, setIsCharacterSectionCollapsed] = useState(false);
+    const [isGridSectionCollapsed, setIsGridSectionCollapsed] = useState(false);
+    const [gridSettings, setGridSettings] = useState({
+        gridWidth: 20,
+        gridHeight: 20,
+        gridSize: 40,
+        visible: true,
+        color: '#ccc'
+    });
 
 
     // Load campaign and map data
@@ -135,10 +159,23 @@ const Play = () => {
             }
         }));
 
+        // Update grid settings from map data
+        setGridSettings({
+            gridWidth: mapData.gridWidth || 20,
+            gridHeight: mapData.gridHeight || 20,
+            gridSize: mapData.gridSettings?.size || 40,
+            visible: mapData.gridSettings?.visible !== false,
+            color: mapData.gridSettings?.color || '#ccc'
+        });
+
         setGameState(prev => ({
             ...prev,
             tokens: loadedTokens,
-            gridSize: mapData.gridSettings.size
+            gridSize: mapData.gridSettings?.size || 40,
+            mapDimensions: {
+                width: (mapData.gridWidth || 20) * (mapData.gridSettings?.size || 40),
+                height: (mapData.gridHeight || 20) * (mapData.gridSettings?.size || 40)
+            }
         }));
     };
 
@@ -204,12 +241,13 @@ const Play = () => {
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
         
-        // If near center area, suggest token drop, otherwise background
+        // If near center area, suggest token drop, otherwise background (GM only)
         const isNearCenter = Math.abs(mouseX - centerX) < 150 && Math.abs(mouseY - centerY) < 150;
+        const dragType = isNearCenter ? 'token' : (isGM ? 'background' : 'token');
         
         setDragState({
             isDragOver: true,
-            dragType: isNearCenter ? 'token' : 'background'
+            dragType: dragType
         });
     };
 
@@ -242,16 +280,17 @@ const Play = () => {
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
         
-        // Determine if this should be a token or background based on drop position
+        // Determine if this should be a token or background based on drop position and GM status
         const isNearCenter = Math.abs(mouseX - centerX) < 150 && Math.abs(mouseY - centerY) < 150;
+        const shouldUploadAsBackground = !isNearCenter && isGM;
         
         try {
-            if (isNearCenter) {
-                // Upload as token
-                await handleTokenUpload(file, mouseX, mouseY);
-            } else {
-                // Upload as background
+            if (shouldUploadAsBackground) {
+                // Upload as background (GM only)
                 await handleBackgroundUpload(file);
+            } else {
+                // Upload as token (always fallback for non-GMs)
+                await handleTokenUpload(file, mouseX, mouseY);
             }
         } catch (error) {
             toast({
@@ -307,15 +346,15 @@ const Play = () => {
         
         // Convert screen coordinates to world coordinates
         const worldPos = screenToWorld(dropX, dropY);
-        const snapToGrid = (coord) => Math.round(coord / gameState.gridSize) * gameState.gridSize;
+        const snapToGrid = (coord) => Math.round(coord / gridSettings.gridSize) * gridSettings.gridSize;
         
         const newToken = {
             id: `token_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
             assetId,
             x: snapToGrid(worldPos.x),
             y: snapToGrid(worldPos.y),
-            width: gameState.gridSize,
-            height: gameState.gridSize,
+            width: gridSettings.gridSize,
+            height: gridSettings.gridSize,
             ownerId: user.user.id,
             name: file.name.replace(/\.[^/.]+$/, '') // Remove file extension
         };
@@ -373,7 +412,24 @@ const Play = () => {
     useEffect(() => {
         const handleConnect = () => setIsConnected(true);
         const handleDisconnect = () => setIsConnected(false);
+
+        socket.on('connect', handleConnect);
+        socket.on('disconnect', handleDisconnect);
         
+        // Connect the socket
+        socket.connect();
+
+        return () => {
+            socket.off('connect', handleConnect);
+            socket.off('disconnect', handleDisconnect);
+            socket.disconnect();
+        };
+    }, []);
+
+    // Socket.io event handlers
+    useEffect(() => {
+        socket.emit('joinCampaign', campaignId);
+
         const handleTokenMove = (data) => {
             if (data.playerId !== user.user.id) {
                 setGameState(prev => ({
@@ -386,21 +442,6 @@ const Play = () => {
                 }));
             }
         };
-
-        socket.on('connect', handleConnect);
-        socket.on('disconnect', handleDisconnect);
-        socket.on('tokenMove', handleTokenMove);
-
-        return () => {
-            socket.off('connect', handleConnect);
-            socket.off('disconnect', handleDisconnect);
-            socket.off('tokenMove', handleTokenMove);
-        };
-    }, []);
-
-    // Socket.io event handlers
-    useEffect(() => {
-        socket.emit('joinCampaign', campaignId);
 
         const handleTokenUpdate = (data) => {
             if (data.playerId !== user.user.id) {
@@ -425,11 +466,13 @@ const Play = () => {
             }
         };
 
+        socket.on('tokenMove', handleTokenMove);
         socket.on('tokenUpdate', handleTokenUpdate);
         socket.on('backgroundUpdate', handleBackgroundUpdate);
 
         return () => {
             socket.emit('leaveCampaign', campaignId);
+            socket.off('tokenMove', handleTokenMove);
             socket.off('tokenUpdate', handleTokenUpdate);
             socket.off('backgroundUpdate', handleBackgroundUpdate);
         };
@@ -582,6 +625,11 @@ const Play = () => {
             
             if (isSameToken && canDragToken) {
                 // If clicking own selected token, start dragging (don't deselect)
+                // Calculate offset from mouse position to token's top-left corner
+                const tokenOffsetX = worldPos.x - clickedToken.x;
+                const tokenOffsetY = worldPos.y - clickedToken.y;
+                setDragOffset({ x: tokenOffsetX, y: tokenOffsetY });
+                
                 setGameState(prev => ({
                     ...prev,
                     isDragging: true
@@ -595,6 +643,13 @@ const Play = () => {
                 }));
             } else {
                 // Select the new token and enable dragging if owned
+                if (canDragToken) {
+                    // Calculate offset from mouse position to token's top-left corner
+                    const tokenOffsetX = worldPos.x - clickedToken.x;
+                    const tokenOffsetY = worldPos.y - clickedToken.y;
+                    setDragOffset({ x: tokenOffsetX, y: tokenOffsetY });
+                }
+                
                 setGameState(prev => ({
                     ...prev,
                     selectedToken: clickedToken,
@@ -610,14 +665,18 @@ const Play = () => {
                     selectedToken: null,
                     isDragging: false
                 }));
-            } else if (background.image) {
-                // Start background dragging only if no token was selected
+            } else if (background.image && isGM) {
+                // Start background dragging only if no token was selected and user is GM
                 setBackground(prev => ({
                     ...prev,
                     isDragging: true,
                     dragStart: { 
-                        x: offsetX - prev.x, 
-                        y: offsetY - prev.y 
+                        x: offsetX, 
+                        y: offsetY 
+                    },
+                    startPosition: {
+                        x: prev.x,
+                        y: prev.y
                     }
                 }));
             }
@@ -630,28 +689,34 @@ const Play = () => {
 
         if (gameState.isDragging && gameState.selectedToken) {
             // Handle token dragging - only for owned tokens
-            const snapToGrid = (coord) => Math.round(coord / gameState.gridSize) * gameState.gridSize;
+            const snapToGrid = (coord) => Math.round(coord / gridSettings.gridSize) * gridSettings.gridSize;
+            
+            // Calculate new position accounting for drag offset
+            const newX = snapToGrid(worldPos.x - dragOffset.x);
+            const newY = snapToGrid(worldPos.y - dragOffset.y);
             
             setGameState(prev => ({
                 ...prev,
                 tokens: prev.tokens.map(token =>
                     token.id === prev.selectedToken.id
-                        ? { ...token, x: snapToGrid(worldPos.x), y: snapToGrid(worldPos.y) }
+                        ? { ...token, x: newX, y: newY }
                         : token
                 )
             }));
 
             socket.emit('tokenMove', {
+                campaignId: campaignId,
                 tokenId: gameState.selectedToken.id,
-                x: snapToGrid(worldPos.x),
-                y: snapToGrid(worldPos.y),
+                x: newX,
+                y: newY,
                 playerId: user.user.id
             });
         } else if (background.isDragging) {
-            // Handle background dragging with world coordinates
-            const worldDragStart = screenToWorld(background.dragStart.x, background.dragStart.y);
-            const newX = worldPos.x - (worldDragStart.x - background.x);
-            const newY = worldPos.y - (worldDragStart.y - background.y);
+            // Handle background dragging - convert screen movement to world coordinates
+            const deltaX = (offsetX - background.dragStart.x) / viewport.zoom;
+            const deltaY = (offsetY - background.dragStart.y) / viewport.zoom;
+            const newX = background.startPosition.x + deltaX;
+            const newY = background.startPosition.y + deltaY;
             
             setBackground(prev => ({
                 ...prev,
@@ -668,7 +733,49 @@ const Play = () => {
         }
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = async () => {
+        // Save token position to database if we were dragging a token
+        if (gameState.isDragging && gameState.selectedToken) {
+            try {
+                const currentToken = gameState.tokens.find(token => token.id === gameState.selectedToken.id);
+                if (currentToken) {
+                    await axiosPrivate.patch(`/maps/${currentMap._id}/tokens/${gameState.selectedToken.id}`, {
+                        x: currentToken.x,
+                        y: currentToken.y
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to save token position:', error);
+                toast({
+                    title: "Warning",
+                    description: "Token position may not be saved",
+                    status: "warning"
+                });
+            }
+        }
+
+        // Save background position to database if we were dragging background
+        if (background.isDragging) {
+            try {
+                await axiosPrivate.patch(`/maps/${currentMap._id}`, {
+                    backgroundImage: {
+                        ...currentMap.backgroundImage,
+                        position: { 
+                            x: background.x, 
+                            y: background.y 
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('Failed to save background position:', error);
+                toast({
+                    title: "Warning",
+                    description: "Background position may not be saved",
+                    status: "warning"
+                });
+            }
+        }
+
         // Only clear dragging states, but preserve token selection
         setGameState(prev => ({
             ...prev,
@@ -714,6 +821,18 @@ const Play = () => {
         });
     };
 
+    // Add wheel event listener with passive: false
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        canvas.addEventListener('wheel', handleWheel, { passive: false });
+
+        return () => {
+            canvas.removeEventListener('wheel', handleWheel);
+        };
+    }, [handleWheel]);
+
     // Helper functions
     const findTokenAtPosition = (x, y) => {
         return gameState.tokens.find(token => {
@@ -725,14 +844,13 @@ const Play = () => {
     };
 
     const drawGrid = useCallback((ctx) => {
-        // Optimize grid drawing by only drawing visible grid lines when zoomed in
-        const gridSize = gameState.gridSize;
+        // Skip grid drawing if grid is not visible or zoomed out too far
+        if (!gridSettings.visible || viewport.zoom < 0.5) return;
+        
+        const gridSize = gridSettings.gridSize;
         const { width, height } = gameState.mapDimensions;
         
-        // Skip grid drawing if zoomed out too far (performance optimization)
-        if (viewport.zoom < 0.5) return;
-        
-        ctx.strokeStyle = viewport.zoom > 1 ? '#aaa' : '#ccc';
+        ctx.strokeStyle = gridSettings.color || '#ccc';
         ctx.lineWidth = Math.max(0.5 / viewport.zoom, 0.1);
 
         // Draw vertical lines
@@ -750,7 +868,7 @@ const Play = () => {
             ctx.lineTo(width, y);
             ctx.stroke();
         }
-    }, [gameState.gridSize, gameState.mapDimensions, viewport.zoom]);
+    }, [gridSettings, gameState.mapDimensions, viewport.zoom]);
 
     // Memoized render function for better performance
     const memoizedRenderGame = useCallback(() => {
@@ -793,6 +911,9 @@ const Play = () => {
         };
     }, []);
 
+    // Check if current user is GM
+    const isGM = campaign?.gm?._id === user.user.id || campaign?.gm === user.user.id;
+
     // Get user's characters from tokens - Clean implementation
     const userCharacters = gameState.tokens.filter(token => {
         // Handle ownerId as user object with _id property
@@ -800,8 +921,136 @@ const Play = () => {
         return tokenOwnerId === user.user.id;
     });
 
+    // Load campaign maps when campaign and user data are available
+    useEffect(() => {
+        if (campaign && isGM) {
+            loadCampaignMaps();
+        }
+    }, [campaign, isGM]);
+
     const handleBackToMain = () => {
         navigate('/campaigns');
+    };
+
+    // Load campaign maps for GM
+    const loadCampaignMaps = async () => {
+        if (!isGM || !campaignId) return;
+        try {
+            const response = await axiosPrivate.get(`/maps/campaign/${campaignId}`);
+            setCampaignMaps(response.data);
+        } catch (error) {
+            console.error('Error loading campaign maps:', error);
+            toast({
+                title: "Error loading maps",
+                description: "Failed to load campaign maps",
+                status: "error"
+            });
+        }
+    };
+
+    // Create new map
+    const handleCreateMap = async () => {
+        if (!newMapName.trim()) {
+            toast({
+                title: "Map name required",
+                description: "Please enter a name for the new map",
+                status: "warning"
+            });
+            return;
+        }
+
+        try {
+            const response = await axiosPrivate.post('/maps', {
+                name: newMapName,
+                campaign: campaignId,
+                gridWidth: 20,
+                gridHeight: 20,
+                gridSize: 40
+            });
+
+            toast({
+                title: "Map created",
+                description: `"${newMapName}" has been created successfully`,
+                status: "success"
+            });
+
+            setNewMapName('');
+            setIsCreatingMap(false);
+            await loadCampaignMaps();
+        } catch (error) {
+            console.error('Error creating map:', error);
+            toast({
+                title: "Error creating map",
+                description: error.response?.data?.message || "Failed to create map",
+                status: "error"
+            });
+        }
+    };
+
+    // Switch to different map
+    const handleSwitchMap = async (mapId) => {
+        try {
+            // Update campaign's active map using POST with campaignId in body
+            await axiosPrivate.post('/campaigns/update', {
+                campaignId: campaignId,
+                activeMap: mapId
+            });
+
+            // Reload the page to switch to the new map
+            window.location.reload();
+        } catch (error) {
+            console.error('Error switching map:', error);
+            toast({
+                title: "Error switching map",
+                description: "Failed to switch to the selected map",
+                status: "error"
+            });
+        }
+    };
+
+    // Update grid settings
+    const handleGridSettingsUpdate = async (newSettings) => {
+        try {
+            // Update local state immediately for responsive UI
+            setGridSettings(newSettings);
+            
+            // Calculate new map dimensions
+            const newMapDimensions = {
+                width: newSettings.gridWidth * newSettings.gridSize,
+                height: newSettings.gridHeight * newSettings.gridSize
+            };
+            
+            // Update game state
+            setGameState(prev => ({
+                ...prev,
+                gridSize: newSettings.gridSize,
+                mapDimensions: newMapDimensions
+            }));
+
+            // Update map in database
+            await axiosPrivate.patch(`/maps/${currentMap._id}`, {
+                gridWidth: newSettings.gridWidth,
+                gridHeight: newSettings.gridHeight,
+                gridSettings: {
+                    size: newSettings.gridSize,
+                    visible: newSettings.visible,
+                    color: newSettings.color
+                }
+            });
+
+            toast({
+                title: "Grid settings updated",
+                description: "Map grid settings have been saved successfully",
+                status: "success"
+            });
+        } catch (error) {
+            console.error('Error updating grid settings:', error);
+            toast({
+                title: "Error updating grid settings",
+                description: "Failed to save grid settings",
+                status: "error"
+            });
+        }
     };
 
     // Token name editing functions
@@ -860,7 +1109,7 @@ const Play = () => {
     };
 
     return (
-        <Box position="relative" h="100vh" w="100vw" overflow="hidden">
+        <Box position="relative" h="100vh" w="100vw" overflow="hidden" display="flex">
             {/* Menu Toggle Button - Fixed position */}
             <IconButton
                 icon={<HiMenu />}
@@ -879,7 +1128,8 @@ const Play = () => {
             <Box
                 position="fixed"
                 top={4}
-                right={4}
+                left="50%"
+                transform="translateX(-50%)"
                 zIndex={1000}
                 bg="rgba(0, 0, 0, 0.8)"
                 color="white"
@@ -897,17 +1147,16 @@ const Play = () => {
                 </Text>
             </Box>
 
-            {/* Main Game Canvas - Full Screen */}
+            {/* Main Game Area - Left side */}
             <Box
-                position="absolute"
-                top={0}
-                left={0}
-                w="100%"
+                flex={1}
+                position="relative"
                 h="100%"
                 display="flex"
                 alignItems="center"
                 justifyContent="center"
                 bg="gray.900"
+                mr="320px"
             >
                 <canvas
                     ref={canvasRef}
@@ -917,7 +1166,6 @@ const Play = () => {
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
                     onMouseLeave={handleMouseUp}
-                    onWheel={handleWheel}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
@@ -926,12 +1174,40 @@ const Play = () => {
                             ? `3px dashed ${dragState.dragType === 'token' ? '#F6AD55' : '#4FD1C7'}` 
                             : '2px solid #4A5568',
                         borderRadius: '8px',
-                        cursor: background.isDragging ? 'grabbing' : 'grab',
+                        cursor: background.isDragging ? 'grabbing' : (isGM ? 'grab' : 'default'),
                         boxShadow: dragState.isDragOver 
                             ? `0 0 20px ${dragState.dragType === 'token' ? 'rgba(246, 173, 85, 0.5)' : 'rgba(79, 209, 199, 0.5)'}` 
                             : '0 10px 25px rgba(0,0,0,0.3)',
                         transition: 'all 0.2s ease'
                     }}
+                />
+            </Box>
+
+            {/* Video Chat Sidebar - Right side */}
+            <Box
+                position="fixed"
+                top={0}
+                right={0}
+                w="320px"
+                h="100vh"
+                bg="gray.800"
+                borderLeft="1px solid"
+                borderColor="gray.600"
+                p={4}
+                overflowY="auto"
+                zIndex={999}
+            >
+                <Text fontSize="lg" fontWeight="bold" color="orange.400" mb={4}>
+                    Video Chat
+                </Text>
+                <VideoChat
+                    socket={socket}
+                    campaignId={campaignId}
+                    userId={user.user.id}
+                    userName={user.user.username}
+                    campaign={campaign}
+                    isOpen={true}
+                    isRightSidebar={true}
                 />
             </Box>
 
@@ -965,8 +1241,8 @@ const Play = () => {
                 </Box>
             )}
 
-            {/* Empty State Overlay - when no tokens exist */}
-            {gameState.tokens.length === 0 && !dragState.isDragOver && (
+            {/* Empty State Overlay - when user has no tokens */}
+            {userCharacters.length === 0 && !dragState.isDragOver && (
                 <Box
                     position="fixed"
                     top="50%"
@@ -1142,12 +1418,330 @@ const Play = () => {
                                 </Card>
                             </Box>
 
+                            {/* Map Management Section - GM Only */}
+                            {isGM && (
+                                <Box>
+                                    <HStack 
+                                        spacing={2} 
+                                        mb={3} 
+                                        cursor="pointer" 
+                                        onClick={() => setIsMapSectionCollapsed(!isMapSectionCollapsed)}
+                                        _hover={{ color: 'orange.400' }}
+                                        transition="color 0.2s"
+                                    >
+                                        <Text fontSize="lg" fontWeight="semibold" color="gray.200">
+                                            Map Management
+                                        </Text>
+                                        <IconButton
+                                            icon={isMapSectionCollapsed ? <IoChevronDown /> : <IoChevronUp />}
+                                            size="xs"
+                                            variant="ghost"
+                                            color="gray.400"
+                                            aria-label={isMapSectionCollapsed ? "Expand map management" : "Collapse map management"}
+                                            _hover={{ color: 'orange.400' }}
+                                        />
+                                    </HStack>
+                                    {!isMapSectionCollapsed && (
+                                        <VStack spacing={3} align="stretch">
+                                        {/* Current Active Map */}
+                                        {currentMap && (
+                                            <Card bg="gray.700" borderColor="orange.400" borderWidth="2px">
+                                                <CardBody>
+                                                    <HStack spacing={3}>
+                                                        <Box flex={1}>
+                                                            <Text color="orange.400" fontWeight="bold" fontSize="sm">
+                                                                ACTIVE MAP
+                                                            </Text>
+                                                            <Text color="white" fontWeight="medium">
+                                                                {currentMap.name}
+                                                            </Text>
+                                                            <Text color="gray.400" fontSize="sm">
+                                                                {currentMap.gridWidth}x{currentMap.gridHeight} grid
+                                                            </Text>
+                                                        </Box>
+                                                    </HStack>
+                                                </CardBody>
+                                            </Card>
+                                        )}
+
+                                        {/* Available Maps */}
+                                        {campaignMaps.length > 0 && (
+                                            <Box>
+                                                <Text fontSize="sm" fontWeight="semibold" mb={2} color="gray.300">
+                                                    Switch to Map:
+                                                </Text>
+                                                <VStack spacing={2} align="stretch">
+                                                    {campaignMaps
+                                                        .filter(map => map._id !== currentMap?._id)
+                                                        .map((map) => (
+                                                        <Card key={map._id} bg="gray.700" borderColor="gray.600">
+                                                            <CardBody py={3}>
+                                                                <HStack spacing={3}>
+                                                                    <Box flex={1}>
+                                                                        <Text color="white" fontWeight="medium" fontSize="sm">
+                                                                            {map.name}
+                                                                        </Text>
+                                                                        <Text color="gray.400" fontSize="xs">
+                                                                            {map.gridWidth}x{map.gridHeight} grid
+                                                                        </Text>
+                                                                    </Box>
+                                                                    <Button
+                                                                        size="xs"
+                                                                        colorScheme="orange"
+                                                                        variant="outline"
+                                                                        onClick={() => handleSwitchMap(map._id)}
+                                                                    >
+                                                                        Switch
+                                                                    </Button>
+                                                                </HStack>
+                                                            </CardBody>
+                                                        </Card>
+                                                    ))}
+                                                </VStack>
+                                            </Box>
+                                        )}
+
+                                        {/* Create New Map */}
+                                        <Box>
+                                            {!isCreatingMap ? (
+                                                <Button
+                                                    colorScheme="orange"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    w="full"
+                                                    onClick={() => setIsCreatingMap(true)}
+                                                >
+                                                    + Create New Map
+                                                </Button>
+                                            ) : (
+                                                <VStack spacing={2}>
+                                                    <Input
+                                                        value={newMapName}
+                                                        onChange={(e) => setNewMapName(e.target.value)}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') {
+                                                                handleCreateMap();
+                                                            } else if (e.key === 'Escape') {
+                                                                setIsCreatingMap(false);
+                                                                setNewMapName('');
+                                                            }
+                                                        }}
+                                                        placeholder="Enter map name"
+                                                        size="sm"
+                                                        bg="gray.600"
+                                                        color="white"
+                                                        border="1px solid"
+                                                        borderColor="orange.400"
+                                                        _focus={{ borderColor: 'orange.500', boxShadow: 'none' }}
+                                                        autoFocus
+                                                    />
+                                                    <HStack spacing={2} w="100%">
+                                                        <Button
+                                                            size="xs"
+                                                            colorScheme="orange"
+                                                            onClick={handleCreateMap}
+                                                            flex={1}
+                                                        >
+                                                            Create
+                                                        </Button>
+                                                        <Button
+                                                            size="xs"
+                                                            variant="ghost"
+                                                            onClick={() => {
+                                                                setIsCreatingMap(false);
+                                                                setNewMapName('');
+                                                            }}
+                                                            flex={1}
+                                                        >
+                                                            Cancel
+                                                        </Button>
+                                                    </HStack>
+                                                </VStack>
+                                            )}
+                                        </Box>
+                                        </VStack>
+                                    )}
+                                </Box>
+                            )}
+
+                            {/* Grid Settings Section - GM Only */}
+                            {isGM && (
+                                <Box>
+                                    <HStack 
+                                        spacing={2} 
+                                        mb={3} 
+                                        cursor="pointer" 
+                                        onClick={() => setIsGridSectionCollapsed(!isGridSectionCollapsed)}
+                                        _hover={{ color: 'orange.400' }}
+                                        transition="color 0.2s"
+                                    >
+                                        <Text fontSize="lg" fontWeight="semibold" color="gray.200">
+                                            Grid Settings
+                                        </Text>
+                                        <IconButton
+                                            icon={isGridSectionCollapsed ? <IoChevronDown /> : <IoChevronUp />}
+                                            size="xs"
+                                            variant="ghost"
+                                            color="gray.400"
+                                            aria-label={isGridSectionCollapsed ? "Expand grid settings" : "Collapse grid settings"}
+                                            _hover={{ color: 'orange.400' }}
+                                        />
+                                    </HStack>
+                                    {!isGridSectionCollapsed && (
+                                        <VStack spacing={4} align="stretch">
+                                            <Card bg="gray.700" borderColor="gray.600">
+                                                <CardBody>
+                                                    <VStack spacing={4} align="stretch">
+                                                        {/* Grid Dimensions */}
+                                                        <Box>
+                                                            <Text fontSize="sm" fontWeight="semibold" mb={3} color="gray.300">
+                                                                Map Dimensions (Grid Squares)
+                                                            </Text>
+                                                            <HStack spacing={4}>
+                                                                <FormControl>
+                                                                    <FormLabel fontSize="xs" color="gray.400">Width</FormLabel>
+                                                                    <NumberInput
+                                                                        value={gridSettings.gridWidth}
+                                                                        onChange={(value) => {
+                                                                            const newSettings = { ...gridSettings, gridWidth: parseInt(value) || 1 };
+                                                                            handleGridSettingsUpdate(newSettings);
+                                                                        }}
+                                                                        min={1}
+                                                                        max={100}
+                                                                        size="sm"
+                                                                        bg="gray.600"
+                                                                    >
+                                                                        <NumberInputField 
+                                                                            color="white"
+                                                                            border="1px solid"
+                                                                            borderColor="gray.500"
+                                                                            _focus={{ borderColor: 'orange.400', boxShadow: 'none' }}
+                                                                        />
+                                                                        <NumberInputStepper>
+                                                                            <NumberIncrementStepper color="gray.400" />
+                                                                            <NumberDecrementStepper color="gray.400" />
+                                                                        </NumberInputStepper>
+                                                                    </NumberInput>
+                                                                </FormControl>
+                                                                <FormControl>
+                                                                    <FormLabel fontSize="xs" color="gray.400">Height</FormLabel>
+                                                                    <NumberInput
+                                                                        value={gridSettings.gridHeight}
+                                                                        onChange={(value) => {
+                                                                            const newSettings = { ...gridSettings, gridHeight: parseInt(value) || 1 };
+                                                                            handleGridSettingsUpdate(newSettings);
+                                                                        }}
+                                                                        min={1}
+                                                                        max={100}
+                                                                        size="sm"
+                                                                        bg="gray.600"
+                                                                    >
+                                                                        <NumberInputField 
+                                                                            color="white"
+                                                                            border="1px solid"
+                                                                            borderColor="gray.500"
+                                                                            _focus={{ borderColor: 'orange.400', boxShadow: 'none' }}
+                                                                        />
+                                                                        <NumberInputStepper>
+                                                                            <NumberIncrementStepper color="gray.400" />
+                                                                            <NumberDecrementStepper color="gray.400" />
+                                                                        </NumberInputStepper>
+                                                                    </NumberInput>
+                                                                </FormControl>
+                                                            </HStack>
+                                                        </Box>
+
+                                                        {/* Grid Square Size */}
+                                                        <Box>
+                                                            <Text fontSize="sm" fontWeight="semibold" mb={3} color="gray.300">
+                                                                Grid Square Size (Pixels)
+                                                            </Text>
+                                                            <NumberInput
+                                                                value={gridSettings.gridSize}
+                                                                onChange={(value) => {
+                                                                    const newSettings = { ...gridSettings, gridSize: parseInt(value) || 10 };
+                                                                    handleGridSettingsUpdate(newSettings);
+                                                                }}
+                                                                min={10}
+                                                                max={200}
+                                                                size="sm"
+                                                                bg="gray.600"
+                                                            >
+                                                                <NumberInputField 
+                                                                    color="white"
+                                                                    border="1px solid"
+                                                                    borderColor="gray.500"
+                                                                    _focus={{ borderColor: 'orange.400', boxShadow: 'none' }}
+                                                                />
+                                                                <NumberInputStepper>
+                                                                    <NumberIncrementStepper color="gray.400" />
+                                                                    <NumberDecrementStepper color="gray.400" />
+                                                                </NumberInputStepper>
+                                                            </NumberInput>
+                                                        </Box>
+
+                                                        {/* Grid Visibility */}
+                                                        <Box>
+                                                            <HStack spacing={3}>
+                                                                <Text fontSize="sm" fontWeight="semibold" color="gray.300">
+                                                                    Show Grid Lines
+                                                                </Text>
+                                                                <Switch
+                                                                    isChecked={gridSettings.visible}
+                                                                    onChange={(e) => {
+                                                                        const newSettings = { ...gridSettings, visible: e.target.checked };
+                                                                        handleGridSettingsUpdate(newSettings);
+                                                                    }}
+                                                                    colorScheme="orange"
+                                                                    size="sm"
+                                                                />
+                                                            </HStack>
+                                                        </Box>
+
+                                                        {/* Current Map Size Info */}
+                                                        <Box bg="gray.600" p={3} borderRadius="md">
+                                                            <Text fontSize="xs" color="gray.400" mb={1}>
+                                                                Current Map Size:
+                                                            </Text>
+                                                            <Text fontSize="sm" color="white">
+                                                                {gridSettings.gridWidth * gridSettings.gridSize} × {gridSettings.gridHeight * gridSettings.gridSize} pixels
+                                                            </Text>
+                                                            <Text fontSize="xs" color="gray.400">
+                                                                ({gridSettings.gridWidth} × {gridSettings.gridHeight} grid squares @ {gridSettings.gridSize}px each)
+                                                            </Text>
+                                                        </Box>
+                                                    </VStack>
+                                                </CardBody>
+                                            </Card>
+                                        </VStack>
+                                    )}
+                                </Box>
+                            )}
+
                             {/* User Characters Section */}
                             <Box>
-                                <Text fontSize="lg" fontWeight="semibold" mb={3} color="gray.200">
-                                    Your Characters
-                                </Text>
-                                <VStack spacing={3} align="stretch">
+                                <HStack 
+                                    spacing={2} 
+                                    mb={3} 
+                                    cursor="pointer" 
+                                    onClick={() => setIsCharacterSectionCollapsed(!isCharacterSectionCollapsed)}
+                                    _hover={{ color: 'orange.400' }}
+                                    transition="color 0.2s"
+                                >
+                                    <Text fontSize="lg" fontWeight="semibold" color="gray.200">
+                                        Your Characters
+                                    </Text>
+                                    <IconButton
+                                        icon={isCharacterSectionCollapsed ? <IoChevronDown /> : <IoChevronUp />}
+                                        size="xs"
+                                        variant="ghost"
+                                        color="gray.400"
+                                        aria-label={isCharacterSectionCollapsed ? "Expand characters" : "Collapse characters"}
+                                        _hover={{ color: 'orange.400' }}
+                                    />
+                                </HStack>
+                                {!isCharacterSectionCollapsed && (
+                                    <VStack spacing={3} align="stretch">
                                     {userCharacters.length > 0 ? (
                                         userCharacters.map((character, index) => (
                                             <Card key={character.id || index} bg="gray.700" borderColor="gray.600">
@@ -1209,7 +1803,7 @@ const Play = () => {
                                                                 </Text>
                                                             )}
                                                             <Text color="gray.400" fontSize="sm">
-                                                                Position: ({Math.round(character.x / gameState.gridSize)}, {Math.round(character.y / gameState.gridSize)})
+                                                                Position: ({Math.round(character.x / gridSettings.gridSize)}, {Math.round(character.y / gridSettings.gridSize)})
                                                             </Text>
                                                         </Box>
                                                     </HStack>
@@ -1247,8 +1841,10 @@ const Play = () => {
                                             </CardBody>
                                         </Card>
                                     )}
-                                </VStack>
+                                    </VStack>
+                                )}
                             </Box>
+
 
                             {/* Zoom Controls & Status */}
                             <Box>
