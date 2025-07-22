@@ -30,6 +30,14 @@ exports.signup = async (req, res) => {
         }
 
         var userRole = await Role.findOne({"name": "User"});
+        
+        // Create the User role if it doesn't exist
+        if (!userRole) {
+            userRole = new Role({ name: "User" });
+            await userRole.save();
+            console.log("Created User role");
+        }
+        
         console.log(userRole);
         const newUser = new User({
             email, username, password, roles: [userRole._id]
