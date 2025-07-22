@@ -46,7 +46,7 @@
    
    **Client (Frontend):**
    ```
-   REACT_APP_API_URL=https://your-backend-url.railway.app
+   REACT_APP_BACKEND_BASE_URL=https://your-backend-url.railway.app
    REACT_APP_SOCKET_URL=https://your-eventserver-url.railway.app
    ```
 
