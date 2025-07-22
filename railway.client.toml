@@ -1,6 +1,7 @@
 [build]
 builder = "dockerfile" 
 dockerfilePath = "Dockerfile.client"
+buildArgs = ["REACT_APP_API_URL", "REACT_APP_SOCKET_URL"]
 
 [deploy]
 numReplicas = 1
