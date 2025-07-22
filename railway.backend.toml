@@ -1,0 +1,13 @@
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile.backend"
+
+[deploy]
+numReplicas = 1
+sleepApplication = false
+healthcheckPath = "/"
+healthcheckTimeout = 100
+
+[build.watchPaths]
+include = ["backend/**", "Dockerfile.backend"]
+ignore = ["client/**", "eventserver/**"]
