@@ -1,32 +1,57 @@
-import {React} from 'react';
-import CampaignList from './CampaignList';
-import { Card, CardHeader, CardBody, Heading } from '@chakra-ui/react'
-import {useAuth} from '../providers/AuthProvider';
+import React, { Suspense } from 'react';
+import { VStack, Container, Spinner, Center, Text, useColorModeValue } from '@chakra-ui/react';
+import { useAuth } from '../providers/AuthProvider';
+import Hero from './Hero';
+import UnauthenticatedCTA from './UnauthenticatedCTA';
+import AuthenticatedDashboard from './AuthenticatedDashboard';
+import Features from './Features';
 
 const Home = () => {
-  const {user} = useAuth();
+  const { user } = useAuth();
+  const bgColor = useColorModeValue('gray.50', 'gray.900');
 
   return (
-    <div>
-      <Card maxW='lg' m={2} colorScheme='blue'>
-        <CardHeader><Heading size='xs'>vttLess News</Heading></CardHeader>
-        <CardBody>vttLess!  A new minimal vtt under construction. Tell yer friends.</CardBody>
-      </Card>
+    <VStack 
+      spacing={0} 
+      minH="100vh" 
+      w="full" 
+      bg={bgColor}
+      align="stretch"
+    >
+      {/* Hero Section - Always visible */}
+      <Hero />
       
-      { user ? (
-        <div>
-            <Card maxW='lg' m={2}>
-              <CardHeader><Heading size='xs'>Personal Updates</Heading></CardHeader>
-              <CardBody>Only logged in users can see this</CardBody>
-            </Card>
-            <CampaignList />
-        </div>
+      {/* Conditional Content */}
+      <Suspense fallback={<LoadingSection />}>
+        {user ? (
+          <AuthenticatedDashboard />
         ) : (
-        <></>
-      )
+          <>
+            <UnauthenticatedCTA />
+            <Features />
+          </>
+        )}
+      </Suspense>
+    </VStack>
+  );
+};
 
-      }
-    </div>
+const LoadingSection = () => {
+  return (
+    <Container maxW="container.xl" py={12}>
+      <Center>
+        <VStack spacing={4}>
+          <Spinner
+            thickness="4px"
+            speed="0.65s"
+            emptyColor="gray.200"
+            color="orange.500"
+            size="xl"
+          />
+          <Text color="gray.500">Loading your dashboard...</Text>
+        </VStack>
+      </Center>
+    </Container>
   );
 };
 

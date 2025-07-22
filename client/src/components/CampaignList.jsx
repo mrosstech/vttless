@@ -5,7 +5,8 @@ import {
     useDisclosure, IconButton, Flex,
     useToast, Box, Container,
     Tabs, TabList, TabPanels, Tab, TabPanel,
-    Heading, Text
+    Heading, Text, Spinner, Center,
+    Skeleton, SkeletonText
 } from '@chakra-ui/react';
 import { FiPlus, FiEdit, FiTrash2, FiUsers, FiMap } from 'react-icons/fi';
 import { FaPlay } from 'react-icons/fa';
@@ -21,7 +22,7 @@ const CampaignList = () => {
     const { isOpen, onOpen, onClose } = useDisclosure();
     const [campaigns, setCampaigns] = useState([]);
     const [selectedCampaign, setSelectedCampaign] = useState(null);
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
     const toast = useToast();
 
     // Separate campaigns into different categories
@@ -121,6 +122,10 @@ const CampaignList = () => {
         ));
     };
 
+    if (isLoading) {
+        return <CampaignListSkeleton />;
+    }
+
     return (
         <Container maxW="container.xl">
             <VStack spacing={4} w="full">
@@ -132,6 +137,7 @@ const CampaignList = () => {
                             setSelectedCampaign(null);
                             onOpen();
                         }}
+                        size={{ base: "md", md: "lg" }}
                     >
                         New Campaign
                     </Button>
@@ -301,6 +307,32 @@ const CampaignTable = ({ campaigns, isGM, ...props }) => {
                 />
             )}
         </>
+    );
+};
+
+const CampaignListSkeleton = () => {
+    return (
+        <Container maxW="container.xl">
+            <VStack spacing={4} w="full">
+                {/* New Campaign Button Skeleton */}
+                <Box w="full" display="flex" justifyContent="center" py={4}>
+                    <Skeleton height="40px" width="150px" borderRadius="md" />
+                </Box>
+
+                {/* Tabs Skeleton */}
+                <Box w="full">
+                    <Skeleton height="40px" width="full" mb={4} borderRadius="md" />
+                    
+                    {/* Table Skeleton */}
+                    <VStack spacing={3}>
+                        <Skeleton height="50px" width="full" borderRadius="md" />
+                        {[...Array(3)].map((_, index) => (
+                            <Skeleton key={index} height="60px" width="full" borderRadius="md" />
+                        ))}
+                    </VStack>
+                </Box>
+            </VStack>
+        </Container>
     );
 };
 

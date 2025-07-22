@@ -132,10 +132,10 @@ const MenuToggle = ({ toggle, isOpen }) => {
               <>
               <MenuItem to="/logout">Logout</MenuItem>     
               <MenuItem to="/profile" isLast>
-                <Flex align="center">
-                  <Avatar name={user.user.username} src={profilePhotoUrl || ''} /><Text>{user.user.username}</Text>
+                <Flex align="center" gap={3}>
+                  <Avatar name={user.user.username} src={profilePhotoUrl || ''} />
+                  <Text>{user.user.username}</Text>
                 </Flex>
-                
               </MenuItem>
               </>
           : 
