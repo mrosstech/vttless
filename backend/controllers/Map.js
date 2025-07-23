@@ -60,7 +60,15 @@ exports.createMap = async (req, res) => {
 
 exports.getMap = async (req, res) => {
     try {
-        const map = await Map.findById(req.params.id);
+        const map = await Map.findById(req.params.id)
+            .populate({
+                path: 'characterInstances.characterId',
+                populate: {
+                    path: 'assetId ownerId',
+                    select: 'url filename username'
+                }
+            });
+            
         if (!map) {
             return res.status(404).json({ message: "Map not found" });
         }

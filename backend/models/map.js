@@ -13,6 +13,7 @@ const mapSchema = new mongoose.Schema({
         },
         scale: { type: Number, default: 1 }
     },
+    // Legacy tokens (for backward compatibility)
     tokens: [{
         id: String,
         assetId: { type: mongoose.Schema.Types.ObjectId, ref: 'Asset' },
@@ -23,6 +24,37 @@ const mapSchema = new mongoose.Schema({
         ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
         name: String,
         properties: mongoose.Schema.Types.Mixed
+    }],
+    
+    // New character instances system
+    characterInstances: [{
+        characterId: { 
+            type: mongoose.Schema.Types.ObjectId, 
+            ref: 'Character',
+            required: true
+        },
+        x: { 
+            type: Number, 
+            required: true 
+        },
+        y: { 
+            type: Number, 
+            required: true 
+        },
+        width: { 
+            type: Number, 
+            required: true 
+        },
+        height: { 
+            type: Number, 
+            required: true 
+        },
+        visible: { 
+            type: Boolean, 
+            default: true 
+        },
+        // Instance-specific properties (overrides character defaults)
+        instanceProperties: mongoose.Schema.Types.Mixed
     }],
     gridSettings: {
         size: { type: Number, default: 40 },
