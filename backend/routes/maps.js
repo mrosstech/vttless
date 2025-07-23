@@ -2,6 +2,23 @@ const express = require("express");
 const router = express.Router();
 const passport = require('passport');
 const mapController = require("../controllers/Map");
+const multer = require('multer');
+
+// Configure multer for temporary file storage
+const upload = multer({ 
+    dest: 'uploads/temp/',
+    limits: {
+        fileSize: 10 * 1024 * 1024 // 10MB limit
+    },
+    fileFilter: (req, file, cb) => {
+        // Accept only image files
+        if (file.mimetype.startsWith('image/')) {
+            cb(null, true);
+        } else {
+            cb(new Error('Only image files are allowed'), false);
+        }
+    }
+});
 
 
 // Map routes
@@ -16,5 +33,12 @@ router.patch('/:id', passport.authenticate('jwt', {session: false}), mapControll
 router.patch('/:id/tokens', passport.authenticate('jwt', {session: false}), mapController.addToken);
 router.patch('/:id/tokens/:tokenId', passport.authenticate('jwt', {session: false}), mapController.updateToken);
 router.delete('/:id/tokens/:tokenId', passport.authenticate('jwt', {session: false}), mapController.deleteToken);
+
+// Map analysis route
+router.post('/analyze', 
+    passport.authenticate('jwt', {session: false}), 
+    upload.single('image'), 
+    mapController.analyzeMap
+);
 
 module.exports = router;
