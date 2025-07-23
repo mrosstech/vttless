@@ -101,16 +101,28 @@ const Play = () => {
                 setCampaign(response.data);
                 
                 if (response.data.activeMap) {
-                    //const mapResponse = await axiosPrivate.get(`/maps/${response.data.activeMap}`);
-                    setCurrentMap(response.data.activeMap);
-                    
-                    // Initialize game state from map data
-                    await initializeGameState(response.data.activeMap);
+                    try {
+                        // Extract map ID - activeMap might be populated object or just ID string
+                        const mapId = response.data.activeMap._id || response.data.activeMap;
+                        const mapResponse = await axiosPrivate.get(`/maps/${mapId}`);
+                        setCurrentMap(mapResponse.data);
+                        
+                        // Initialize game state from map data
+                        await initializeGameState(mapResponse.data);
+                    } catch (mapError) {
+                        console.error('Error loading map:', mapError);
+                        toast({
+                            title: "Error loading map",
+                            description: `Failed to load map: ${mapError.response?.data?.message || mapError.message}`,
+                            status: "error"
+                        });
+                    }
                 }
             } catch (error) {
+                console.error('Error loading campaign:', error);
                 toast({
                     title: "Error loading campaign",
-                    description: error.message,
+                    description: `Failed to load campaign: ${error.response?.data?.message || error.message}`,
                     status: "error"
                 });
             }
@@ -295,13 +307,17 @@ const Play = () => {
     };
 
     const handleBackgroundUpload = async (file) => {
+        if (!currentMap?._id) {
+            throw new Error('No active map found. Please ensure a map is loaded before uploading backgrounds.');
+        }
+        
         const assetId = await uploadAsset(file, 'background');
         const imageUrl = await loadAssetUrl(assetId);
         
         // Update map in database
         await axiosPrivate.patch(`/maps/${currentMap._id}`, {
             backgroundImage: {
-                url: imageUrl,
+                assetId: assetId,
                 position: { x: 0, y: 0 }
             }
         });
@@ -319,12 +335,16 @@ const Play = () => {
         img.src = imageUrl;
 
         // Notify other players
-        socket.emit('backgroundUpdate', {
-            campaignId,
-            mapId: currentMap._id,
-            assetId,
-            position: { x: 0, y: 0 }
-        });
+        if (currentMap?._id) {
+            socket.emit('backgroundUpdate', {
+                campaignId,
+                mapId: currentMap._id,
+                backgroundImage: {
+                    assetId: assetId,
+                    position: { x: 0, y: 0 }
+                }
+            });
+        }
         
         toast({
             title: "Background updated",
@@ -334,6 +354,10 @@ const Play = () => {
     };
 
     const handleTokenUpload = async (file, dropX, dropY) => {
+        if (!currentMap?._id) {
+            throw new Error('No active map found. Please ensure a map is loaded before uploading tokens.');
+        }
+        
         const assetId = await uploadAsset(file, 'token');
         const imageUrl = await loadAssetUrl(assetId);
         
@@ -381,11 +405,13 @@ const Play = () => {
         }
         
         // Notify other players
-        socket.emit('tokenAdded', {
-            campaignId,
-            mapId: currentMap._id,
-            token: newToken
-        });
+        if (currentMap?._id) {
+            socket.emit('tokenAdded', {
+                campaignId,
+                mapId: currentMap._id,
+                token: newToken
+            });
+        }
         
         toast({
             title: "Token added",
@@ -448,13 +474,34 @@ const Play = () => {
             }
         };
 
-        const handleBackgroundUpdate = (data) => {
+        const handleBackgroundUpdate = async (data) => {
             if (data.playerId !== user.user.id) {
-                setBackground(prev => ({
-                    ...prev,
-                    x: data.position.x,
-                    y: data.position.y
-                }));
+                // Handle new background image
+                if (data.backgroundImage?.assetId) {
+                    try {
+                        const imageUrl = await loadAssetUrl(data.backgroundImage.assetId);
+                        const img = new Image();
+                        img.onload = () => {
+                            setBackground(prev => ({
+                                ...prev,
+                                image: img,
+                                x: data.backgroundImage.position.x,
+                                y: data.backgroundImage.position.y
+                            }));
+                        };
+                        img.src = imageUrl;
+                    } catch (error) {
+                        console.error('Error loading background image:', error);
+                    }
+                }
+                // Handle position-only updates
+                else if (data.position) {
+                    setBackground(prev => ({
+                        ...prev,
+                        x: data.position.x,
+                        y: data.position.y
+                    }));
+                }
             }
         };
 
@@ -727,7 +774,7 @@ const Play = () => {
 
     const handleMouseUp = async () => {
         // Save token position to database if we were dragging a token
-        if (gameState.isDragging && gameState.selectedToken) {
+        if (gameState.isDragging && gameState.selectedToken && currentMap?._id) {
             try {
                 const currentToken = gameState.tokens.find(token => token.id === gameState.selectedToken.id);
                 if (currentToken) {
@@ -746,11 +793,11 @@ const Play = () => {
         }
 
         // Save background position to database if we were dragging background
-        if (background.isDragging) {
+        if (background.isDragging && currentMap?._id && currentMap.backgroundImage?.assetId) {
             try {
                 await axiosPrivate.patch(`/maps/${currentMap._id}`, {
                     backgroundImage: {
-                        ...currentMap.backgroundImage,
+                        assetId: currentMap.backgroundImage.assetId,
                         position: { 
                             x: background.x, 
                             y: background.y 
@@ -984,12 +1031,29 @@ const Play = () => {
                 activeMap: mapId
             });
 
-            // Reload the page to switch to the new map
-            window.location.reload();
+            // Fetch the new map data instead of reloading the page
+            const mapResponse = await axiosPrivate.get(`/maps/${mapId}`);
+            setCurrentMap(mapResponse.data);
+            
+            // Update campaign state to reflect the new active map ID
+            setCampaign(prev => ({
+                ...prev,
+                activeMap: mapId
+            }));
+            
+            // Initialize game state from new map data
+            await initializeGameState(mapResponse.data);
+
+            toast({
+                title: "Map switched successfully",
+                description: `Switched to map: ${mapResponse.data.name}`,
+                status: "success"
+            });
         } catch (error) {
+            console.error('Error switching map:', error);
             toast({
                 title: "Error switching map",
-                description: "Failed to switch to the selected map",
+                description: `Failed to switch to the selected map: ${error.response?.data?.message || error.message}`,
                 status: "error"
             });
         }
