@@ -1,5 +1,6 @@
 // backend/controllers/Map.js
 const { Map, Campaign } = require("../models");
+const { analyzeMapImage } = require("../services/mapAnalyzer");
 
 exports.createMap = async (req, res) => {
     try {
@@ -320,5 +321,43 @@ exports.deleteToken = async (req, res) => {
     } catch (error) {
         console.error("Error deleting token:", error);
         res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+// Map analysis endpoint
+exports.analyzeMap = async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ 
+                success: false,
+                message: "No image file provided" 
+            });
+        }
+
+        console.log("Analyzing map image:", req.file.path);
+        const analysisResult = await analyzeMapImage(req.file.path);
+        
+        // Add suggestions based on analysis
+        if (analysisResult.success) {
+            analysisResult.suggestions = {
+                gridWidth: Math.max(1, Math.round(analysisResult.gridWidth)),
+                gridHeight: Math.max(1, Math.round(analysisResult.gridHeight)),
+                gridSize: Math.max(20, Math.round(analysisResult.gridSize))
+            };
+        }
+
+        res.json(analysisResult);
+    } catch (error) {
+        console.error("Error analyzing map:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Analysis failed",
+            error: error.message,
+            // Provide fallback values
+            gridHeight: 10,
+            gridWidth: 10,
+            gridSize: 40,
+            confidence: 0.0
+        });
     }
 };

@@ -311,16 +311,62 @@ const Play = () => {
             throw new Error('No active map found. Please ensure a map is loaded before uploading backgrounds.');
         }
         
+        // Show initial upload toast
+        const uploadToastId = toast({
+            title: "Uploading background...",
+            description: "Analyzing grid and uploading image",
+            status: "info",
+            duration: null, // Keep it open until we update it
+            isClosable: false
+        });
+
+        let analysisResult = null;
+        
+        // Try to analyze the image for grid properties
+        try {
+            const formData = new FormData();
+            formData.append('image', file);
+            
+            const analysisResponse = await axiosPrivate.post('/maps/analyze', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
+            });
+            
+            analysisResult = analysisResponse.data;
+        } catch (analysisError) {
+            console.log('Analysis failed, continuing with upload:', analysisError);
+        }
+        
         const assetId = await uploadAsset(file, 'background');
         const imageUrl = await loadAssetUrl(assetId);
         
-        // Update map in database
-        await axiosPrivate.patch(`/maps/${currentMap._id}`, {
+        // Prepare map update payload
+        const mapUpdate = {
             backgroundImage: {
                 assetId: assetId,
                 position: { x: 0, y: 0 }
             }
-        });
+        };
+
+        // If analysis was successful and detected a reasonable grid, offer to update grid settings
+        if (analysisResult?.success && analysisResult.confidence > 0.5) {
+            const shouldUpdateGrid = window.confirm(
+                `Grid analysis detected a ${analysisResult.suggestions.gridWidth}×${analysisResult.suggestions.gridHeight} grid with ${analysisResult.suggestions.gridSize}px squares (${Math.round(analysisResult.confidence * 100)}% confidence).\n\nWould you like to update the map's grid settings to match?`
+            );
+            
+            if (shouldUpdateGrid) {
+                mapUpdate.gridWidth = analysisResult.suggestions.gridWidth;
+                mapUpdate.gridHeight = analysisResult.suggestions.gridHeight;
+                mapUpdate.gridSettings = {
+                    ...currentMap.gridSettings,
+                    size: analysisResult.suggestions.gridSize
+                };
+            }
+        }
+        
+        // Update map in database
+        await axiosPrivate.patch(`/maps/${currentMap._id}`, mapUpdate);
 
         // Update local state
         const img = new Image();
@@ -346,10 +392,18 @@ const Play = () => {
             });
         }
         
+        // Close the upload toast and show success
+        toast.close(uploadToastId);
+        
+        const successMessage = analysisResult?.success && mapUpdate.gridWidth 
+            ? `Background updated with grid settings (${mapUpdate.gridWidth}×${mapUpdate.gridHeight})`
+            : "Background updated successfully";
+            
         toast({
             title: "Background updated",
-            description: "Map background has been updated successfully",
-            status: "success"
+            description: successMessage,
+            status: "success",
+            duration: 4000
         });
     };
 
