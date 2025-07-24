@@ -41,7 +41,7 @@ if (typeof window !== 'undefined') {
     
 }
 
-const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isRightSidebar = false, performanceState }) => {
+const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isRightSidebar = false }) => {
     const [localStream, setLocalStream] = useState(null);
     const [peers, setPeers] = useState({});
     const [isVideoEnabled, setIsVideoEnabled] = useState(true);
@@ -51,16 +51,12 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
     const peersRef = useRef({});
     const toast = useToast();
 
-    // Initialize local media stream with adaptive quality
+    // Initialize local media stream with fixed quality to prevent disconnections
     const initializeLocalStream = useCallback(async () => {
         try {
-            // Reduce video quality during heavy interactions
-            const videoConstraints = performanceState?.isHeavyInteraction ? 
-                { width: 160, height: 120, frameRate: 15 } : 
-                { width: 320, height: 240, frameRate: 30 };
-                
+            // Use consistent video quality to prevent peer connection drops
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: videoConstraints,
+                video: { width: 320, height: 240, frameRate: 30 },
                 audio: true
             });
             
@@ -83,7 +79,7 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                 duration: 5000
             });
         }
-    }, [toast, performanceState]);
+    }, [toast]);
 
     // Create peer connection for new user with improved error handling
     const createPeer = useCallback((userToSignal, stream, isInitiator) => {
@@ -185,12 +181,9 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
             // Initialize local stream if it doesn't exist
             if (!stream) {
                 console.log('🎥 Initializing media stream...');
-                const videoConstraints = performanceState?.isHeavyInteraction ? 
-                    { width: 160, height: 120, frameRate: 15 } : 
-                    { width: 320, height: 240, frameRate: 30 };
-                    
+                
                 stream = await navigator.mediaDevices.getUserMedia({
-                    video: videoConstraints,
+                    video: { width: 320, height: 240, frameRate: 30 },
                     audio: true
                 });
                 
@@ -269,7 +262,7 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                 duration: 5000
             });
         }
-    }, [localStream, socket, campaignId, userId, userName, toast, performanceState]);
+    }, [localStream, socket, campaignId, userId, userName, toast]);
 
     // Leave video call
     const leaveCall = useCallback(() => {
@@ -325,6 +318,11 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                 userId
             });
 
+            // Clear persistence
+            if (campaignId && userId) {
+                localStorage.removeItem(`videoCall_${campaignId}_${userId}`);
+            }
+
             toast({
                 title: "Left video call",
                 status: "info",
@@ -339,6 +337,10 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
             setLocalStream(null);
             if (localVideoRef.current) {
                 localVideoRef.current.srcObject = null;
+            }
+            // Clear persistence on error too
+            if (campaignId && userId) {
+                localStorage.removeItem(`videoCall_${campaignId}_${userId}`);
             }
             
             toast({
@@ -518,7 +520,11 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
         }
     }, [localStream]);
 
-    // Dynamically adapt video quality based on performance state
+    // Dynamically adapt video quality based on performance state (DISABLED to prevent disconnections)
+    // Note: Changing video constraints during active calls can cause peer connection drops
+    // This feature is disabled until a safer implementation can be developed
+    
+    /* DISABLED - CAUSES DISCONNECTIONS
     useEffect(() => {
         if (!localStream || !isInCall) return;
 
@@ -551,20 +557,40 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
         const timeoutId = setTimeout(adaptVideoQuality, 100); // Debounce quality changes
         return () => clearTimeout(timeoutId);
     }, [performanceState, localStream, isInCall]);
+    */
 
-    // Initialize on component mount
+    // Initialize on component mount and handle page refresh
     useEffect(() => {
+        // Check if user was previously in a call (persist call state)
+        const wasInCall = localStorage.getItem(`videoCall_${campaignId}_${userId}`);
+        if (wasInCall === 'true' && campaign && !isInCall) {
+            console.log('🔄 Detected previous video call session, attempting to rejoin...');
+            // Auto-rejoin after a short delay to let everything initialize
+            setTimeout(() => {
+                if (!isInCall) { // Double check we're not already joining
+                    joinCall();
+                }
+            }, 1000);
+        }
+
         return () => {
             // Cleanup on unmount
             if (isInCall) {
                 leaveCall();
             }
         };
-    }, [isInCall, leaveCall]);
+    }, [campaign, isInCall, joinCall, leaveCall, campaignId, userId]);
+
+    // Persist call state
+    useEffect(() => {
+        if (campaignId && userId) {
+            localStorage.setItem(`videoCall_${campaignId}_${userId}`, isInCall.toString());
+        }
+    }, [isInCall, campaignId, userId]);
 
     if (!isOpen) return null;
 
-    // Get all campaign participants
+    // Get all campaign participants with fallback for loading states
     const allParticipants = campaign ? [
         { id: campaign.gm._id || campaign.gm, username: campaign.gm.username || 'GM', isGM: true },
         ...(campaign.players || [])
@@ -578,7 +604,21 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                 username: player.username || 'Player',
                 isGM: false
             }))
-    ] : [];
+    ] : [
+        // Fallback: Show at least current user if campaign is still loading
+        { id: userId, username: userName || 'You', isGM: false }
+    ];
+
+    // Add any connected peers that might not be in the campaign data yet
+    Object.keys(peers).forEach(peerId => {
+        if (!allParticipants.find(p => p.id === peerId)) {
+            allParticipants.push({
+                id: peerId,
+                username: peers[peerId].userName || 'Unknown',
+                isGM: false
+            });
+        }
+    });
 
     const videoWindowHeight = isRightSidebar ? "140px" : "120px";
     const spacing = isRightSidebar ? 2 : 3;
@@ -727,8 +767,13 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                                 {isInCall ? `In call with ${Object.keys(peers).length} other(s)` : 'Not in call'}
                             </Text>
                             <Text fontSize="xs" color="gray.400" mt={1}>
-                                Campaign: {allParticipants.length} participant(s)
+                                Campaign: {campaign ? `${allParticipants.length} participant(s)` : 'Loading...'}
                             </Text>
+                            {!campaign && (
+                                <Text fontSize="xs" color="orange.400" mt={1}>
+                                    ⏳ Loading campaign data...
+                                </Text>
+                            )}
                         </Box>
                     </VStack>
                 </CardBody>
@@ -743,7 +788,6 @@ export default memo(VideoChat, (prevProps, nextProps) => {
         prevProps.isOpen === nextProps.isOpen &&
         prevProps.campaignId === nextProps.campaignId &&
         prevProps.userId === nextProps.userId &&
-        prevProps.performanceState?.isHeavyInteraction === nextProps.performanceState?.isHeavyInteraction &&
-        prevProps.performanceState?.interactionType === nextProps.performanceState?.interactionType
+        prevProps.campaign === nextProps.campaign
     );
 });

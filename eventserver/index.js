@@ -24,24 +24,18 @@ io.on("connection", (socket) => {
   console.log("a user connected:", socket.id);
 
   socket.on("tokenMove", (data) => {
-    console.log("Token Move Recieved by the Server");
-    console.log("Token move for campaign: " + data.campaignId + " and token: " + data.tokenId + " and x: " + data.x + " and y: " + data.y + "and player: " + data.playerId);
-    
+    // Removed excessive logging for performance - token moves happen frequently during dragging
     socket.to(data.campaignId).emit("tokenMove", data);
-  
   });
 
   socket.on("tokenUpdate", (data) => {
-    console.log("Token Update Received by the Server");
-    console.log("Token update for campaign: " + data.campaignId + " and token: " + data.tokenId + " and player: " + data.playerId);
-    
+    // Keep minimal logging for token updates (less frequent than moves)
+    console.log("Token update for campaign:", data.campaignId, "token:", data.tokenId);
     socket.to(data.campaignId).emit("tokenUpdate", data);
   });
 
   socket.on("characterPlaced", (data) => {
-    console.log("Character Placed Received by the Server");
-    console.log("Character placement for campaign: " + data.campaignId + " and character: " + data.characterId + " and player: " + data.playerId);
-    
+    console.log("Character placed in campaign:", data.campaignId, "character:", data.characterId);
     socket.to(data.campaignId).emit("characterPlaced", data);
   });
   socket.on("joinCampaign", (campaignId) => {
@@ -49,9 +43,8 @@ io.on("connection", (socket) => {
     socket.join(campaignId);
   });
 
-  // WebRTC signaling events
+  // WebRTC signaling events - minimal logging to reduce noise
   socket.on("webrtc-offer", (data) => {
-    console.log("WebRTC offer from", data.fromUserId, "to", data.toUserId);
     // Forward the offer to the specific user and the campaign room
     socket.to(data.campaignId).emit("webrtc-offer", {
       ...data,
@@ -60,12 +53,11 @@ io.on("connection", (socket) => {
   });
 
   socket.on("webrtc-answer", (data) => {
-    console.log("WebRTC answer from", data.fromUserId, "to", data.toUserId);
     socket.to(data.campaignId).emit("webrtc-answer", data);
   });
 
   socket.on("webrtc-ice-candidate", (data) => {
-    console.log("ICE candidate from", data.fromUserId, "to", data.toUserId);
+    // ICE candidates can be very frequent, no logging
     socket.to(data.campaignId).emit("webrtc-ice-candidate", data);
   });
 
