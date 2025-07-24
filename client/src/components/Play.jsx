@@ -71,24 +71,20 @@ const Play = () => {
         [socket, campaignId]
     );
 
-    // Performance monitoring helpers
+    // Simplified performance monitoring helpers
     const markInteractionStart = useCallback((type) => {
-        setPerformanceState(prev => ({
-            ...prev,
+        setPerformanceState({
             isHeavyInteraction: true,
-            lastInteractionTime: Date.now(),
             interactionType: type
-        }));
+        });
     }, []);
 
     const markInteractionEnd = useCallback(() => {
-        setTimeout(() => {
-            setPerformanceState(prev => ({
-                ...prev,
-                isHeavyInteraction: false,
-                interactionType: null
-            }));
-        }, 200); // Cool-down period
+        // Immediate state clear to prevent flickering
+        setPerformanceState({
+            isHeavyInteraction: false,
+            interactionType: null
+        });
     }, []);
     const [currentMap, setCurrentMap] = useState(null);
     const [gameState, setGameState] = useState({
@@ -141,9 +137,9 @@ const Play = () => {
         isOpen: false,
         character: null
     });
+    // Simplified performance state - only used for video chat optimization
     const [performanceState, setPerformanceState] = useState({
         isHeavyInteraction: false,
-        lastInteractionTime: 0,
         interactionType: null // 'drag', 'resize', 'background'
     });
     const [gridSettings, setGridSettings] = useState({
@@ -1384,16 +1380,10 @@ const Play = () => {
 
     // Memoized render function for better performance during video calls
     const memoizedRenderGame = useCallback(() => {
-        // Skip rendering during heavy interactions to preserve video performance
-        if (performanceState.isHeavyInteraction && performanceState.interactionType === 'drag') {
-            // Reduce frame rate during dragging for better video performance
-            const now = Date.now();
-            if (now - performanceState.lastInteractionTime < 33) { // ~30fps instead of 60fps
-                return;
-            }
-        }
+        // Removed frame skipping optimization that was causing video flickering
+        // The throttled socket emissions provide sufficient performance benefits
         renderGame();
-    }, [gameState, viewport, background, performanceState]);
+    }, [gameState, viewport, background]);
 
     // Animation loop - optimized with RAF
     useEffect(() => {
@@ -1922,7 +1912,6 @@ const Play = () => {
                     campaign={campaign}
                     isOpen={true}
                     isRightSidebar={true}
-                    performanceState={performanceState}
                 />
             </Box>
 
