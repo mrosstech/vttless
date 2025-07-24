@@ -170,7 +170,7 @@ exports.updateCharacter = async (req, res) => {
 
         // Filter allowed updates
         const allowedUpdates = [
-            'name', 'level', 'hitPoints', 'maxHitPoints', 'armorClass', 
+            'name', 'assetId', 'level', 'hitPoints', 'maxHitPoints', 'armorClass', 
             'defaultSize', 'notes', 'properties'
         ];
         const filteredUpdates = Object.keys(updates)

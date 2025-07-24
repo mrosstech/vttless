@@ -88,3 +88,57 @@ exports.getDownloadUrl = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+exports.getCampaignAssets = async (req, res) => {
+    console.log('getCampaignAssets called');
+    try {
+        const { campaignId } = req.params;
+        
+        // Find all active assets for this campaign
+        const assets = await Asset.find({
+            campaign: campaignId,
+            status: 'active'
+        }).select('_id name type key campaign uploadedBy createdAt')
+          .populate('uploadedBy', 'username')
+          .sort({ createdAt: -1 });
+
+        // Generate download URLs for all assets
+        const assetsWithUrls = await Promise.all(
+            assets.map(async (asset) => {
+                try {
+                    const params = {
+                        Bucket: process.env.AWS_S3_BUCKET_NAME,
+                        Key: asset.key,
+                        Expires: 3600 // URL expires in 1 hour
+                    };
+
+                    const downloadUrl = await s3.getSignedUrlPromise('getObject', params);
+                    
+                    return {
+                        _id: asset._id,
+                        name: asset.name,
+                        type: asset.type,
+                        url: downloadUrl,
+                        uploadedBy: asset.uploadedBy,
+                        createdAt: asset.createdAt
+                    };
+                } catch (error) {
+                    console.error(`Error generating URL for asset ${asset._id}:`, error);
+                    return {
+                        _id: asset._id,
+                        name: asset.name,
+                        type: asset.type,
+                        url: null,
+                        uploadedBy: asset.uploadedBy,
+                        createdAt: asset.createdAt
+                    };
+                }
+            })
+        );
+
+        res.json(assetsWithUrls);
+    } catch (error) {
+        console.error('Error fetching campaign assets:', error);
+        res.status(500).json({ message: error.message });
+    }
+};

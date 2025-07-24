@@ -8,7 +8,7 @@ export const uploadAsset = async (file, type, campaignId) => {
             {
                 fileName: file.name,
                 fileType: file.type,
-                type,
+                assetType: type,
                 campaignId
             }
         );
@@ -40,7 +40,7 @@ export const uploadAsset = async (file, type, campaignId) => {
 export const loadAssetUrl = async (assetId) => {
     try {
         const { data: { downloadUrl } } = await api.get(
-            `/assets/${assetId}/download-url`);
+            `/assets/download/${assetId}`);
         return downloadUrl;
     } catch (error) {
         console.error('Error loading asset:', error);

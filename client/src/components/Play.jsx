@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../providers/AuthProvider';
+import { throttle, debounce } from 'lodash';
 import {
     Box,
     useToast,
@@ -35,6 +36,7 @@ import { socket } from '../socket';
 import './Play.css';
 import axiosPrivate from '../utils/axiosPrivate';
 import VideoChat from './VideoChat';
+import CharacterImageUpdate from './CharacterImageUpdate';
 
 
 
@@ -46,6 +48,48 @@ const Play = () => {
     const canvasRef = useRef(null);
     const { isOpen, onOpen, onClose } = useDisclosure();
     const [campaign, setCampaign] = useState(null);
+
+    // Performance-optimized socket emissions
+    const throttledTokenMove = useMemo(
+        () => throttle((moveData) => {
+            socket.emit('tokenMove', moveData);
+        }, 50), // Limit to 20 emissions per second
+        [socket, campaignId]
+    );
+
+    const debouncedTokenMoveEnd = useMemo(
+        () => debounce((moveData) => {
+            socket.emit('tokenMoveEnd', moveData);
+        }, 100), // Send final position 100ms after dragging stops
+        [socket, campaignId]
+    );
+
+    const throttledBackgroundUpdate = useMemo(
+        () => throttle((updateData) => {
+            socket.emit('backgroundUpdate', updateData);
+        }, 100), // Limit background updates to 10 per second
+        [socket, campaignId]
+    );
+
+    // Performance monitoring helpers
+    const markInteractionStart = useCallback((type) => {
+        setPerformanceState(prev => ({
+            ...prev,
+            isHeavyInteraction: true,
+            lastInteractionTime: Date.now(),
+            interactionType: type
+        }));
+    }, []);
+
+    const markInteractionEnd = useCallback(() => {
+        setTimeout(() => {
+            setPerformanceState(prev => ({
+                ...prev,
+                isHeavyInteraction: false,
+                interactionType: null
+            }));
+        }, 200); // Cool-down period
+    }, []);
     const [currentMap, setCurrentMap] = useState(null);
     const [gameState, setGameState] = useState({
         tokens: [],
@@ -92,6 +136,16 @@ const Play = () => {
     const [isCharacterSectionCollapsed, setIsCharacterSectionCollapsed] = useState(false);
     const [isGridSectionCollapsed, setIsGridSectionCollapsed] = useState(false);
     const [campaignCharacters, setCampaignCharacters] = useState([]);
+    const [campaignAssets, setCampaignAssets] = useState([]);
+    const [characterImageModal, setCharacterImageModal] = useState({
+        isOpen: false,
+        character: null
+    });
+    const [performanceState, setPerformanceState] = useState({
+        isHeavyInteraction: false,
+        lastInteractionTime: 0,
+        interactionType: null // 'drag', 'resize', 'background'
+    });
     const [gridSettings, setGridSettings] = useState({
         gridWidth: 20,
         gridHeight: 20,
@@ -280,7 +334,7 @@ const Play = () => {
     const loadAssetUrl = async (assetId) => {
         try {
             const { data: { downloadUrl } } = await axiosPrivate.get(
-                `/assets/${assetId}/download-url`);
+                `/assets/download/${assetId}`);
             return downloadUrl;
         } catch (error) {
             throw error;
@@ -867,6 +921,7 @@ const Play = () => {
                     startPos: { x: selectedTokenData.x, y: selectedTokenData.y },
                     startMouse: { x: worldPos.x, y: worldPos.y }
                 });
+                markInteractionStart('resize');
                 return; // Don't proceed with other click handling
             }
         }
@@ -890,6 +945,7 @@ const Play = () => {
                     ...prev,
                     isDragging: true
                 }));
+                markInteractionStart('drag');
             } else if (isSameToken && !canDragToken) {
                 // If clicking someone else's selected token, deselect it
                 setGameState(prev => ({
@@ -935,6 +991,7 @@ const Play = () => {
                         y: prev.y
                     }
                 }));
+                markInteractionStart('background');
             }
         }
     };
@@ -1042,7 +1099,8 @@ const Play = () => {
                 )
             }));
 
-            socket.emit('tokenMove', {
+            // Use throttled emission to reduce network load
+            throttledTokenMove({
                 campaignId: campaignId,
                 tokenId: gameState.selectedToken.id,
                 x: newX,
@@ -1062,8 +1120,8 @@ const Play = () => {
                 y: newY
             }));
 
-            // Optionally emit background position to other players
-            socket.emit('backgroundMove', {
+            // Optionally emit background position to other players (throttled)
+            throttledBackgroundUpdate({
                 x: newX,
                 y: newY,
                 playerId: user.user.id
@@ -1164,6 +1222,20 @@ const Play = () => {
             }
         }
 
+        // Send final position for any dragged token
+        if (gameState.isDragging && gameState.selectedToken) {
+            const currentToken = gameState.tokens.find(token => token.id === gameState.selectedToken.id);
+            if (currentToken) {
+                debouncedTokenMoveEnd({
+                    campaignId: campaignId,
+                    tokenId: gameState.selectedToken.id,
+                    x: currentToken.x,
+                    y: currentToken.y,
+                    playerId: user.user.id
+                });
+            }
+        }
+
         // Only clear dragging states, but preserve token selection
         setGameState(prev => ({
             ...prev,
@@ -1180,6 +1252,9 @@ const Play = () => {
             startPos: { x: 0, y: 0 },
             startMouse: { x: 0, y: 0 }
         });
+
+        // Mark interaction as ended
+        markInteractionEnd();
     };
 
     // Mouse wheel handler for zoom - optimized for smoother scrolling
@@ -1307,10 +1382,18 @@ const Play = () => {
         }
     }, [gridSettings, gameState.mapDimensions, viewport.zoom]);
 
-    // Memoized render function for better performance
+    // Memoized render function for better performance during video calls
     const memoizedRenderGame = useCallback(() => {
+        // Skip rendering during heavy interactions to preserve video performance
+        if (performanceState.isHeavyInteraction && performanceState.interactionType === 'drag') {
+            // Reduce frame rate during dragging for better video performance
+            const now = Date.now();
+            if (now - performanceState.lastInteractionTime < 33) { // ~30fps instead of 60fps
+                return;
+            }
+        }
         renderGame();
-    }, [gameState, viewport, background]);
+    }, [gameState, viewport, background, performanceState]);
 
     // Animation loop - optimized with RAF
     useEffect(() => {
@@ -1369,8 +1452,39 @@ const Play = () => {
     useEffect(() => {
         if (campaign && user.user.id) {
             loadCampaignCharacters();
+            loadCampaignAssets();
         }
     }, [campaign, user.user.id]);
+
+    // Listen for character imports from D&D Beyond extension
+    useEffect(() => {
+        const handleCharacterImport = (event) => {
+            console.log('🎯 Character import detected from extension:', event.detail);
+            // Refresh the character list and assets when a character is imported
+            if (campaign && user.user.id) {
+                loadCampaignCharacters();
+                loadCampaignAssets(); // Also refresh assets in case a new default token was created
+            }
+        };
+
+        // Add event listener for character imports
+        window.addEventListener('vttless:character-imported', handleCharacterImport);
+
+        // Cleanup event listener on unmount
+        return () => {
+            window.removeEventListener('vttless:character-imported', handleCharacterImport);
+        };
+    }, [campaign, user.user.id]);
+
+    // Cleanup throttled functions on unmount
+    useEffect(() => {
+        return () => {
+            // Cancel any pending throttled/debounced calls
+            throttledTokenMove.cancel();
+            debouncedTokenMoveEnd.cancel();
+            throttledBackgroundUpdate.cancel();
+        };
+    }, [throttledTokenMove, debouncedTokenMoveEnd, throttledBackgroundUpdate]);
 
     const handleBackToMain = () => {
         navigate('/campaigns');
@@ -1404,6 +1518,48 @@ const Play = () => {
                 status: "error"
             });
         }
+    };
+
+    // Load campaign assets
+    const loadCampaignAssets = async () => {
+        if (!campaignId) return;
+        try {
+            const response = await axiosPrivate.get(`/assets/campaign/${campaignId}`);
+            setCampaignAssets(response.data || []);
+        } catch (error) {
+            console.error('Error loading campaign assets:', error);
+            setCampaignAssets([]);
+        }
+    };
+
+    // Handle character image update
+    const handleCharacterImageClick = (character) => {
+        setCharacterImageModal({
+            isOpen: true,
+            character: character
+        });
+    };
+
+    const handleCharacterImageUpdate = (updatedCharacter) => {
+        // Update the character in the campaign characters list
+        setCampaignCharacters(prev => 
+            prev.map(char => 
+                char._id === updatedCharacter._id ? updatedCharacter : char
+            )
+        );
+        
+        // Close the modal
+        setCharacterImageModal({
+            isOpen: false,
+            character: null
+        });
+    };
+
+    const handleCharacterImageModalClose = () => {
+        setCharacterImageModal({
+            isOpen: false,
+            character: null
+        });
     };
 
     // Add character to current map
@@ -1766,6 +1922,7 @@ const Play = () => {
                     campaign={campaign}
                     isOpen={true}
                     isRightSidebar={true}
+                    performanceState={performanceState}
                 />
             </Box>
 
@@ -2317,6 +2474,14 @@ const Play = () => {
                                                             bg="orange.400"
                                                             color="white"
                                                             name={character.name || `Character ${index + 1}`}
+                                                            cursor="pointer"
+                                                            _hover={{ 
+                                                                opacity: 0.8,
+                                                                transform: "scale(1.05)",
+                                                                transition: "all 0.2s"
+                                                            }}
+                                                            onClick={() => handleCharacterImageClick(character)}
+                                                            title="Click to update character image"
                                                         />
                                                         <Box flex={1}>
                                                             {editingToken === character._id ? (
@@ -2481,6 +2646,16 @@ const Play = () => {
                     </DrawerBody>
                 </DrawerContent>
             </Drawer>
+
+            {/* Character Image Update Modal */}
+            <CharacterImageUpdate
+                isOpen={characterImageModal.isOpen}
+                onClose={handleCharacterImageModalClose}
+                character={characterImageModal.character}
+                campaignId={campaignId}
+                onUpdate={handleCharacterImageUpdate}
+                campaignAssets={campaignAssets}
+            />
         </Box>
     );
 };

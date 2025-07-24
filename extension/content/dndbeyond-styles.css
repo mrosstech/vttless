@@ -1,0 +1,122 @@
+/* VTTless D&D Beyond Integration Styles */
+
+.vttless-integration-panel {
+    position: relative;
+    z-index: 1000;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.vttless-integration-panel * {
+    box-sizing: border-box;
+}
+
+.vttless-integration-panel button {
+    transition: all 0.2s ease;
+    outline: none;
+    font-family: inherit;
+}
+
+.vttless-integration-panel button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.vttless-integration-panel button:active {
+    transform: translateY(0);
+}
+
+.vttless-integration-panel button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+/* Loading animation */
+@keyframes vttless-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.vttless-loading {
+    animation: vttless-spin 1s linear infinite;
+}
+
+/* Status indicators */
+.vttless-status-success {
+    color: #10b981 !important;
+}
+
+.vttless-status-error {
+    color: #ef4444 !important;
+}
+
+.vttless-status-warning {
+    color: #f59e0b !important;
+}
+
+.vttless-status-loading {
+    color: #f59e0b !important;
+}
+
+/* Connection status badge */
+.vttless-connection-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.vttless-connection-status::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.vttless-connection-status.connected {
+    color: #10b981;
+}
+
+.vttless-connection-status.disconnected {
+    color: #ef4444;
+}
+
+.vttless-connection-status.connecting {
+    color: #f59e0b;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .vttless-integration-panel {
+        margin: 12px 0;
+        padding: 12px;
+    }
+    
+    .vttless-integration-panel h3 {
+        font-size: 16px !important;
+    }
+    
+    .vttless-integration-panel p {
+        font-size: 13px !important;
+    }
+    
+    .vttless-integration-panel button {
+        padding: 6px 12px !important;
+        font-size: 12px !important;
+    }
+}
+
+/* Hide panel if user prefers reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    .vttless-integration-panel button {
+        transition: none;
+    }
+    
+    .vttless-loading {
+        animation: none;
+    }
+}
