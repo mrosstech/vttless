@@ -85,60 +85,112 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
         }
     }, [toast, performanceState]);
 
-    // Create peer connection for new user
+    // Create peer connection for new user with improved error handling
     const createPeer = useCallback((userToSignal, stream, isInitiator) => {
+        console.log(`🔗 Creating peer connection: ${userId} ${isInitiator ? '→' : '←'} ${userToSignal}`);
         
         const peer = new Peer({
             initiator: isInitiator,
-            trickle: false,
+            trickle: true, // Enable trickle ICE for better connectivity
             stream,
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' }
+                ]
+            }
         });
 
         peer.on('signal', signal => {
             const eventName = isInitiator ? 'webrtc-offer' : 'webrtc-answer';
+            console.log(`📡 Sending ${eventName} from ${userId} to ${userToSignal}`);
+            
             socket.emit(eventName, {
                 campaignId,
                 fromUserId: userId,
                 toUserId: userToSignal,
                 signal,
-                userName: userName, // Include userName in signal
+                userName: userName,
             });
         });
 
         peer.on('stream', remoteStream => {
+            console.log(`🎥 Received stream from ${userToSignal}`);
+            
+            // Update both refs and state atomically
+            const userName = peersRef.current[userToSignal]?.userName || 'Unknown';
+            
             setPeers(prevPeers => ({
                 ...prevPeers,
                 [userToSignal]: {
                     ...prevPeers[userToSignal],
                     stream: remoteStream,
                     peer,
-                    userName: peersRef.current[userToSignal]?.userName || 'Unknown'
+                    userName,
+                    connected: true
                 }
             }));
         });
 
+        peer.on('connect', () => {
+            console.log(`✅ Peer connected: ${userToSignal}`);
+            setPeers(prevPeers => ({
+                ...prevPeers,
+                [userToSignal]: {
+                    ...prevPeers[userToSignal],
+                    connected: true
+                }
+            }));
+        });
+
+        peer.on('close', () => {
+            console.log(`📴 Peer connection closed: ${userToSignal}`);
+            setPeers(prevPeers => {
+                const newPeers = { ...prevPeers };
+                delete newPeers[userToSignal];
+                return newPeers;
+            });
+            delete peersRef.current[userToSignal];
+        });
+
         peer.on('error', error => {
-            console.error('Peer connection error:', error);
+            console.error(`❌ Peer connection error with ${userToSignal}:`, error);
+            
+            // Clean up failed connection
+            setPeers(prevPeers => {
+                const newPeers = { ...prevPeers };
+                delete newPeers[userToSignal];
+                return newPeers;
+            });
+            delete peersRef.current[userToSignal];
+            
             toast({
                 title: "Connection error",
-                description: `Failed to connect to peer: ${error.message}`,
+                description: `Failed to connect to ${peersRef.current[userToSignal]?.userName || userToSignal}`,
                 status: "error",
                 duration: 3000
             });
         });
 
         return peer;
-    }, [socket, campaignId, userId, toast]);
+    }, [socket, campaignId, userId, userName, toast]);
 
-    // Join video call
+    // Join video call with improved connection handling
     const joinCall = useCallback(async () => {
+        console.log(`🚀 ${userName} (${userId}) attempting to join video call...`);
+        
         try {
             let stream = localStream;
             
             // Initialize local stream if it doesn't exist
             if (!stream) {
+                console.log('🎥 Initializing media stream...');
+                const videoConstraints = performanceState?.isHeavyInteraction ? 
+                    { width: 160, height: 120, frameRate: 15 } : 
+                    { width: 320, height: 240, frameRate: 30 };
+                    
                 stream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: 320, height: 240 },
+                    video: videoConstraints,
                     audio: true
                 });
                 
@@ -147,6 +199,7 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                     localVideoRef.current.srcObject = stream;
                 }
 
+                console.log('✅ Media stream initialized');
                 toast({
                     title: "Camera and microphone ready",
                     status: "success",
@@ -154,29 +207,52 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                 });
             }
 
-            // Now join the call with the stream
+            // Set in call state first
             setIsInCall(true);
             
             // Ensure socket is connected before emitting
             if (!socket.connected) {
+                console.log('🔌 Connecting socket...');
                 socket.connect();
-                await new Promise(resolve => {
+                await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        reject(new Error('Socket connection timeout'));
+                    }, 5000);
+                    
                     if (socket.connected) {
+                        clearTimeout(timeout);
                         resolve();
                     } else {
-                        socket.on('connect', resolve);
+                        socket.on('connect', () => {
+                            clearTimeout(timeout);
+                            resolve();
+                        });
                     }
                 });
             }
             
+            // Clear any existing peers before joining
+            Object.values(peersRef.current).forEach(({ peer }) => {
+                if (peer && !peer.destroyed) {
+                    peer.destroy();
+                }
+            });
+            peersRef.current = {};
+            setPeers({});
+            
             // Re-join campaign to ensure we're in the right room
+            console.log(`🏠 Joining campaign room: ${campaignId}`);
             socket.emit('joinCampaign', campaignId);
             
-            socket.emit('user-joined-video', {
-                campaignId,
-                userId,
-                userName
-            });
+            // Wait a bit for the join to complete, then announce video join
+            setTimeout(() => {
+                console.log(`📢 Announcing video join for ${userName}`);
+                socket.emit('user-joined-video', {
+                    campaignId,
+                    userId,
+                    userName
+                });
+            }, 100);
 
             toast({
                 title: "Joined video call",
@@ -184,15 +260,16 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                 duration: 2000
             });
         } catch (error) {
-            console.error('Error joining call:', error);
+            console.error('❌ Error joining call:', error);
+            setIsInCall(false);
             toast({
                 title: "Failed to join call",
-                description: "Please allow camera and microphone access",
+                description: error.message || "Please allow camera and microphone access",
                 status: "error",
                 duration: 5000
             });
         }
-    }, [localStream, socket, campaignId, userId, userName, toast]);
+    }, [localStream, socket, campaignId, userId, userName, toast, performanceState]);
 
     // Leave video call
     const leaveCall = useCallback(() => {
@@ -302,9 +379,17 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
         }
 
         const handleUserJoinedVideo = ({ userId: joinedUserId, userName: joinedUserName }) => {
+            console.log(`👤 User joined video: ${joinedUserName} (${joinedUserId})`);
             if (joinedUserId === userId) return; // Don't connect to self
 
-            if (!peersRef.current[joinedUserId] && localStream) {
+            // Prevent duplicate connections
+            if (peersRef.current[joinedUserId]) {
+                console.log(`⚠️ Peer ${joinedUserId} already exists, skipping`);
+                return;
+            }
+
+            if (localStream) {
+                console.log(`🔄 Creating initiator connection to ${joinedUserName}`);
                 const peer = createPeer(joinedUserId, localStream, true);
                 peersRef.current[joinedUserId] = { peer, userName: joinedUserName };
                 
@@ -314,16 +399,32 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                     [joinedUserId]: {
                         peer,
                         userName: joinedUserName,
-                        stream: null // Will be set when stream arrives
+                        stream: null,
+                        connected: false
                     }
                 }));
+            } else {
+                console.warn(`❌ No local stream available for connection to ${joinedUserName}`);
             }
         };
 
         const handleWebRTCOffer = ({ fromUserId, signal, userName: fromUserName }) => {
+            console.log(`📩 Received WebRTC offer from ${fromUserName} (${fromUserId})`);
             if (fromUserId === userId) return; // Ignore own offers
 
-            if (!peersRef.current[fromUserId] && localStream) {
+            // Prevent duplicate connections and race conditions
+            if (peersRef.current[fromUserId]) {
+                console.log(`⚠️ Peer ${fromUserId} already exists, signaling existing peer`);
+                try {
+                    peersRef.current[fromUserId].peer.signal(signal);
+                } catch (error) {
+                    console.error(`❌ Error signaling existing peer ${fromUserId}:`, error);
+                }
+                return;
+            }
+
+            if (localStream) {
+                console.log(`🔄 Creating receiver connection from ${fromUserName}`);
                 const peer = createPeer(fromUserId, localStream, false);
                 peersRef.current[fromUserId] = { peer, userName: fromUserName };
                 
@@ -333,17 +434,53 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                     [fromUserId]: {
                         peer,
                         userName: fromUserName,
-                        stream: null // Will be set when stream arrives
+                        stream: null,
+                        connected: false
                     }
                 }));
                 
-                peer.signal(signal);
+                try {
+                    peer.signal(signal);
+                } catch (error) {
+                    console.error(`❌ Error signaling new peer ${fromUserId}:`, error);
+                    // Clean up failed peer
+                    delete peersRef.current[fromUserId];
+                    setPeers(prevPeers => {
+                        const newPeers = { ...prevPeers };
+                        delete newPeers[fromUserId];
+                        return newPeers;
+                    });
+                }
+            } else {
+                console.warn(`❌ No local stream available for offer from ${fromUserName}`);
             }
         };
 
         const handleWebRTCAnswer = ({ fromUserId, signal }) => {
+            console.log(`📨 Received WebRTC answer from ${fromUserId}`);
+            
             if (peersRef.current[fromUserId]) {
-                peersRef.current[fromUserId].peer.signal(signal);
+                try {
+                    peersRef.current[fromUserId].peer.signal(signal);
+                } catch (error) {
+                    console.error(`❌ Error processing answer from ${fromUserId}:`, error);
+                }
+            } else {
+                console.warn(`⚠️ Received answer from unknown peer ${fromUserId}`);
+            }
+        };
+
+        const handleWebRTCIceCandidate = ({ fromUserId, signal }) => {
+            console.log(`🧊 Received ICE candidate from ${fromUserId}`);
+            
+            if (peersRef.current[fromUserId]) {
+                try {
+                    peersRef.current[fromUserId].peer.signal(signal);
+                } catch (error) {
+                    console.error(`❌ Error processing ICE candidate from ${fromUserId}:`, error);
+                }
+            } else {
+                console.warn(`⚠️ Received ICE candidate from unknown peer ${fromUserId}`);
             }
         };
 
@@ -362,12 +499,14 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
         socket.on('user-joined-video', handleUserJoinedVideo);
         socket.on('webrtc-offer', handleWebRTCOffer);
         socket.on('webrtc-answer', handleWebRTCAnswer);
+        socket.on('webrtc-ice-candidate', handleWebRTCIceCandidate);
         socket.on('user-left-video', handleUserLeftVideo);
 
         return () => {
             socket.off('user-joined-video', handleUserJoinedVideo);
             socket.off('webrtc-offer', handleWebRTCOffer);
             socket.off('webrtc-answer', handleWebRTCAnswer);
+            socket.off('webrtc-ice-candidate', handleWebRTCIceCandidate);
             socket.off('user-left-video', handleUserLeftVideo);
         };
     }, [socket, isInCall, userId, localStream, createPeer]);
@@ -541,7 +680,7 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                                             <Text color="gray.500" fontSize="xs" textAlign="center">
                                                 {isCurrentUser && !isInCall ? "Not in call" : 
                                                  isCurrentUser ? "No video" : 
-                                                 peerData ? "Connecting..." : "Offline"}
+                                                 peerData ? (peerData.connected ? "Connected (no video)" : "Connecting...") : "Offline"}
                                             </Text>
                                         </VStack>
                                     )}
