@@ -1,0 +1,86 @@
+{
+  "manifest_version": 3,
+  "name": "VTTless D&D Beyond Integration",
+  "version": "1.0.0",
+  "description": "Seamlessly integrate D&D Beyond character sheets with VTTless virtual tabletop",
+  
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs"
+  ],
+  
+  "host_permissions": [
+    "https://www.dndbeyond.com/*",
+    "https://character-service.dndbeyond.com/*",
+    "http://localhost:3000/*",
+    "http://localhost:3001/*",
+    "https://*.vttless.com/*"
+  ],
+  
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.dndbeyond.com/characters/*"
+      ],
+      "js": [
+        "shared/character-parser.js",
+        "content/dndbeyond-content.js"
+      ],
+      "css": [
+        "content/dndbeyond-styles.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "http://localhost:3000/*",
+        "http://localhost:3001/*",
+        "https://*.vttless.com/*"
+      ],
+      "js": [
+        "shared/character-parser.js",
+        "content/vttless-content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "VTTless D&D Beyond Integration",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "shared/*",
+        "content/*"
+      ],
+      "matches": [
+        "https://www.dndbeyond.com/*",
+        "http://localhost:3000/*",
+        "http://localhost:3001/*",
+        "https://*.vttless.com/*"
+      ]
+    }
+  ]
+}

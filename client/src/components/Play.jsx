@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../providers/AuthProvider';
+import { throttle, debounce } from 'lodash';
 import {
     Box,
     useToast,
@@ -35,6 +36,7 @@ import { socket } from '../socket';
 import './Play.css';
 import axiosPrivate from '../utils/axiosPrivate';
 import VideoChat from './VideoChat';
+import CharacterImageUpdate from './CharacterImageUpdate';
 
 
 
@@ -46,6 +48,48 @@ const Play = () => {
     const canvasRef = useRef(null);
     const { isOpen, onOpen, onClose } = useDisclosure();
     const [campaign, setCampaign] = useState(null);
+
+    // Performance-optimized socket emissions
+    const throttledTokenMove = useMemo(
+        () => throttle((moveData) => {
+            socket.emit('tokenMove', moveData);
+        }, 50), // Limit to 20 emissions per second
+        [socket, campaignId]
+    );
+
+    const debouncedTokenMoveEnd = useMemo(
+        () => debounce((moveData) => {
+            socket.emit('tokenMoveEnd', moveData);
+        }, 100), // Send final position 100ms after dragging stops
+        [socket, campaignId]
+    );
+
+    const throttledBackgroundUpdate = useMemo(
+        () => throttle((updateData) => {
+            socket.emit('backgroundUpdate', updateData);
+        }, 100), // Limit background updates to 10 per second
+        [socket, campaignId]
+    );
+
+    // Performance monitoring helpers
+    const markInteractionStart = useCallback((type) => {
+        setPerformanceState(prev => ({
+            ...prev,
+            isHeavyInteraction: true,
+            lastInteractionTime: Date.now(),
+            interactionType: type
+        }));
+    }, []);
+
+    const markInteractionEnd = useCallback(() => {
+        setTimeout(() => {
+            setPerformanceState(prev => ({
+                ...prev,
+                isHeavyInteraction: false,
+                interactionType: null
+            }));
+        }, 200); // Cool-down period
+    }, []);
     const [currentMap, setCurrentMap] = useState(null);
     const [gameState, setGameState] = useState({
         tokens: [],
@@ -78,12 +122,30 @@ const Play = () => {
     const [editingToken, setEditingToken] = useState(null);
     const [editingName, setEditingName] = useState('');
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+    const [resizeState, setResizeState] = useState({
+        isResizing: false,
+        resizeHandle: null, // 'se', 'sw', 'ne', 'nw', 's', 'e', 'n', 'w'
+        startSize: { width: 0, height: 0 },
+        startPos: { x: 0, y: 0 },
+        startMouse: { x: 0, y: 0 }
+    });
     const [campaignMaps, setCampaignMaps] = useState([]);
     const [isCreatingMap, setIsCreatingMap] = useState(false);
     const [newMapName, setNewMapName] = useState('');
     const [isMapSectionCollapsed, setIsMapSectionCollapsed] = useState(false);
     const [isCharacterSectionCollapsed, setIsCharacterSectionCollapsed] = useState(false);
     const [isGridSectionCollapsed, setIsGridSectionCollapsed] = useState(false);
+    const [campaignCharacters, setCampaignCharacters] = useState([]);
+    const [campaignAssets, setCampaignAssets] = useState([]);
+    const [characterImageModal, setCharacterImageModal] = useState({
+        isOpen: false,
+        character: null
+    });
+    const [performanceState, setPerformanceState] = useState({
+        isHeavyInteraction: false,
+        lastInteractionTime: 0,
+        interactionType: null // 'drag', 'resize', 'background'
+    });
     const [gridSettings, setGridSettings] = useState({
         gridWidth: 20,
         gridHeight: 20,
@@ -150,8 +212,8 @@ const Play = () => {
             }
         }
 
-       // Load tokens
-        const loadedTokens = await Promise.all(mapData.tokens.map(async token => {
+       // Load legacy tokens
+        const loadedLegacyTokens = await Promise.all((mapData.tokens || []).map(async token => {
             try {
                 const imageUrl = await loadAssetUrl(token.assetId);
                 const img = new Image();
@@ -165,6 +227,52 @@ const Play = () => {
             }
         }));
 
+        // Load character instances (new system)
+        const loadedCharacterInstances = await Promise.all((mapData.characterInstances || []).map(async instance => {
+            try {
+                const character = instance.characterId;
+                
+                // Extract assetId - it might be an object with _id or just a string
+                const assetId = character.assetId?._id || character.assetId;
+                
+                if (!assetId) {
+                    console.error('No assetId found for character:', character);
+                    return null;
+                }
+                
+                const imageUrl = await loadAssetUrl(assetId);
+                const img = new Image();
+                await new Promise(resolve => {
+                    img.onload = resolve;
+                    img.src = imageUrl;
+                });
+                
+                // Convert character instance to token-like structure for compatibility
+                return {
+                    id: `char_${character._id}`,
+                    assetId: assetId,
+                    x: instance.x,
+                    y: instance.y,
+                    width: instance.width,
+                    height: instance.height,
+                    ownerId: character.ownerId,
+                    name: character.name,
+                    image: img,
+                    characterId: character._id, // Keep reference to character
+                    isCharacterInstance: true // Mark as character instance
+                };
+            } catch (error) {
+                console.error('Error loading character instance:', error);
+                return null;
+            }
+        }));
+
+        // Filter out null values from failed character instances
+        const validCharacterInstances = loadedCharacterInstances.filter(instance => instance !== null);
+
+        // Combine legacy tokens and character instances
+        const allTokens = [...loadedLegacyTokens, ...validCharacterInstances];
+
         // Update grid settings from map data
         setGridSettings({
             gridWidth: mapData.gridWidth || 20,
@@ -176,7 +284,7 @@ const Play = () => {
 
         setGameState(prev => ({
             ...prev,
-            tokens: loadedTokens,
+            tokens: allTokens,
             gridSize: mapData.gridSettings?.size || 40,
             mapDimensions: {
                 width: (mapData.gridWidth || 20) * (mapData.gridSettings?.size || 40),
@@ -226,7 +334,7 @@ const Play = () => {
     const loadAssetUrl = async (assetId) => {
         try {
             const { data: { downloadUrl } } = await axiosPrivate.get(
-                `/assets/${assetId}/download-url`);
+                `/assets/download/${assetId}`);
             return downloadUrl;
         } catch (error) {
             throw error;
@@ -368,6 +476,38 @@ const Play = () => {
         // Update map in database
         await axiosPrivate.patch(`/maps/${currentMap._id}`, mapUpdate);
 
+        // Update local map state if grid was changed
+        if (mapUpdate.gridWidth || mapUpdate.gridHeight || mapUpdate.gridSettings) {
+            const updatedMap = {
+                ...currentMap,
+                ...mapUpdate
+            };
+            setCurrentMap(updatedMap);
+
+            // Update grid settings state
+            if (mapUpdate.gridWidth || mapUpdate.gridHeight || mapUpdate.gridSettings) {
+                const newGridSettings = {
+                    gridWidth: mapUpdate.gridWidth || currentMap.gridWidth,
+                    gridHeight: mapUpdate.gridHeight || currentMap.gridHeight,
+                    gridSize: mapUpdate.gridSettings?.size || currentMap.gridSettings?.size || gridSettings.gridSize,
+                    visible: mapUpdate.gridSettings?.visible !== undefined ? mapUpdate.gridSettings.visible : gridSettings.visible,
+                    color: mapUpdate.gridSettings?.color || gridSettings.color
+                };
+                
+                setGridSettings(newGridSettings);
+
+                // Update game state dimensions
+                setGameState(prev => ({
+                    ...prev,
+                    gridSize: newGridSettings.gridSize,
+                    mapDimensions: {
+                        width: newGridSettings.gridWidth * newGridSettings.gridSize,
+                        height: newGridSettings.gridHeight * newGridSettings.gridSize
+                    }
+                }));
+            }
+        }
+
         // Update local state
         const img = new Image();
         img.onload = () => {
@@ -413,65 +553,73 @@ const Play = () => {
         }
         
         const assetId = await uploadAsset(file, 'token');
-        const imageUrl = await loadAssetUrl(assetId);
         
         // Convert screen coordinates to world coordinates
         const worldPos = screenToWorld(dropX, dropY);
         const snapToGrid = (coord) => Math.round(coord / gridSettings.gridSize) * gridSettings.gridSize;
         
-        const newToken = {
-            id: `token_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
-            assetId,
-            x: snapToGrid(worldPos.x),
-            y: snapToGrid(worldPos.y),
-            width: gridSettings.gridSize,
-            height: gridSettings.gridSize,
-            ownerId: user.user.id,
-            name: file.name.replace(/\.[^/.]+$/, '') // Remove file extension
-        };
+        const characterName = file.name.replace(/\.[^/.]+$/, ''); // Remove file extension
+        const x = snapToGrid(worldPos.x);
+        const y = snapToGrid(worldPos.y);
         
-        // Load the image for immediate display
-        const img = new Image();
-        await new Promise(resolve => {
-            img.onload = resolve;
-            img.src = imageUrl;
-        });
-        
-        const tokenWithImage = { ...newToken, image: img };
-        
-        // Update local state
-        setGameState(prev => ({
-            ...prev,
-            tokens: [...prev.tokens, tokenWithImage]
-        }));
-        
-        // Update map in database
         try {
-            await axiosPrivate.patch(`/maps/${currentMap._id}/tokens`, {
-                token: newToken
+            // 1. Create the campaign character
+            const characterResponse = await axiosPrivate.post(`/campaigns/${campaignId}/characters`, {
+                name: characterName,
+                assetId,
+                level: 1,
+                hitPoints: 10,
+                maxHitPoints: 10,
+                armorClass: 10,
+                defaultSize: {
+                    width: gridSettings.gridSize,
+                    height: gridSettings.gridSize
+                }
+            });
+            
+            const newCharacter = characterResponse.data;
+            
+            // 2. Place the character on the current map
+            await axiosPrivate.post(`/characters/${newCharacter._id}/place/${currentMap._id}`, {
+                x,
+                y,
+                width: gridSettings.gridSize,
+                height: gridSettings.gridSize
+            });
+            
+            // 3. Reload the map and character data
+            const [mapResponse] = await Promise.all([
+                axiosPrivate.get(`/maps/${currentMap._id}`),
+                loadCampaignCharacters() // Refresh character list
+            ]);
+            
+            setCurrentMap(mapResponse.data);
+            initializeGameState(mapResponse.data);
+            
+            // 4. Notify other players
+            socket.emit('characterPlaced', {
+                campaignId,
+                mapId: currentMap._id,
+                characterId: newCharacter._id,
+                x,
+                y,
+                width: gridSettings.gridSize,
+                height: gridSettings.gridSize,
+                playerId: user.user.id
+            });
+            
+            toast({
+                title: "Character created",
+                description: `${characterName} has been created and added to the map`,
+                status: "success"
             });
         } catch (error) {
             toast({
-                title: "Warning",
-                description: "Token added locally but may not be saved to database",
-                status: "warning"
+                title: "Error",
+                description: error.response?.data?.message || "Failed to create character",
+                status: "error"
             });
         }
-        
-        // Notify other players
-        if (currentMap?._id) {
-            socket.emit('tokenAdded', {
-                campaignId,
-                mapId: currentMap._id,
-                token: newToken
-            });
-        }
-        
-        toast({
-            title: "Token added",
-            description: `${newToken.name} has been added to the map`,
-            status: "success"
-        });
     };
 
 
@@ -521,7 +669,13 @@ const Play = () => {
                     ...prev,
                     tokens: prev.tokens.map(token =>
                         token.id === data.tokenId
-                            ? { ...token, x: data.x, y: data.y }
+                            ? { 
+                                ...token, 
+                                x: data.x, 
+                                y: data.y,
+                                ...(data.width !== undefined && { width: data.width }),
+                                ...(data.height !== undefined && { height: data.height })
+                            }
                             : token
                     )
                 }));
@@ -614,8 +768,8 @@ const Play = () => {
             }
         });
         
-        // Draw selected token name label (hide during dragging)
-        if (gameState.selectedToken && !gameState.isDragging) {
+        // Draw selected token name label and resize handles (hide during dragging)
+        if (gameState.selectedToken && !gameState.isDragging && !resizeState.isResizing) {
             // Get the current token data from the tokens array (has updated position)
             const currentToken = gameState.tokens.find(token => token.id === gameState.selectedToken.id);
             if (currentToken) {
@@ -654,6 +808,56 @@ const Play = () => {
                 ctx.fillText(tokenName, labelX, labelY);
                 
                 ctx.restore();
+
+                // Draw resize handles if user owns the token
+                const tokenOwnerId = currentToken?.ownerId?._id || currentToken?.ownerId;
+                if (tokenOwnerId === user.user.id) {
+                    ctx.save();
+                    const handleSize = 8 / viewport.zoom;
+                    const tokenRight = currentToken.x + currentToken.width * gameState.scale;
+                    const tokenBottom = currentToken.y + currentToken.height * gameState.scale;
+                    const tokenCenterX = currentToken.x + (currentToken.width * gameState.scale) / 2;
+                    const tokenCenterY = currentToken.y + (currentToken.height * gameState.scale) / 2;
+
+                    // Draw resize handles
+                    ctx.fillStyle = '#4299E1'; // Blue color
+                    ctx.strokeStyle = '#FFFFFF';
+                    ctx.lineWidth = 1 / viewport.zoom;
+
+                    // Corner handles
+                    const corners = [
+                        { x: currentToken.x, y: currentToken.y }, // nw
+                        { x: tokenRight, y: currentToken.y }, // ne
+                        { x: currentToken.x, y: tokenBottom }, // sw
+                        { x: tokenRight, y: tokenBottom } // se
+                    ];
+
+                    // Edge handles
+                    const edges = [
+                        { x: tokenCenterX, y: currentToken.y }, // n
+                        { x: tokenRight, y: tokenCenterY }, // e
+                        { x: tokenCenterX, y: tokenBottom }, // s
+                        { x: currentToken.x, y: tokenCenterY } // w  
+                    ];
+
+                    // Draw all handles
+                    [...corners, ...edges].forEach(handle => {
+                        ctx.fillRect(
+                            handle.x - handleSize/2,
+                            handle.y - handleSize/2,
+                            handleSize,
+                            handleSize
+                        );
+                        ctx.strokeRect(
+                            handle.x - handleSize/2,
+                            handle.y - handleSize/2,
+                            handleSize,
+                            handleSize
+                        );
+                    });
+
+                    ctx.restore();
+                }
             }
         }
         
@@ -706,6 +910,20 @@ const Play = () => {
                     return; // Don't proceed with other click handling
                 }
             }
+
+            // Check for resize handles on selected token
+            const resizeHandle = getResizeHandle(worldPos.x, worldPos.y, selectedTokenData);
+            if (resizeHandle && (selectedTokenData?.ownerId?._id || selectedTokenData?.ownerId) === user.user.id) {
+                setResizeState({
+                    isResizing: true,
+                    resizeHandle,
+                    startSize: { width: selectedTokenData.width, height: selectedTokenData.height },
+                    startPos: { x: selectedTokenData.x, y: selectedTokenData.y },
+                    startMouse: { x: worldPos.x, y: worldPos.y }
+                });
+                markInteractionStart('resize');
+                return; // Don't proceed with other click handling
+            }
         }
         
         if (clickedToken) {
@@ -727,6 +945,7 @@ const Play = () => {
                     ...prev,
                     isDragging: true
                 }));
+                markInteractionStart('drag');
             } else if (isSameToken && !canDragToken) {
                 // If clicking someone else's selected token, deselect it
                 setGameState(prev => ({
@@ -772,6 +991,7 @@ const Play = () => {
                         y: prev.y
                     }
                 }));
+                markInteractionStart('background');
             }
         }
     };
@@ -779,6 +999,88 @@ const Play = () => {
     const handleMouseMove = (e) => {
         const { offsetX, offsetY } = e.nativeEvent;
         const worldPos = screenToWorld(offsetX, offsetY);
+
+        if (resizeState.isResizing && gameState.selectedToken) {
+            // Handle token resizing
+            const deltaX = worldPos.x - resizeState.startMouse.x;
+            const deltaY = worldPos.y - resizeState.startMouse.y;
+            
+            let newWidth = resizeState.startSize.width;
+            let newHeight = resizeState.startSize.height;
+            let newX = resizeState.startPos.x;
+            let newY = resizeState.startPos.y;
+
+            // Calculate new dimensions based on resize handle
+            switch (resizeState.resizeHandle) {
+                case 'se': // southeast corner
+                    newWidth = snapSizeToGrid(resizeState.startSize.width + deltaX / gameState.scale);
+                    newHeight = snapSizeToGrid(resizeState.startSize.height + deltaY / gameState.scale);
+                    break;
+                case 'sw': // southwest corner
+                    newWidth = snapSizeToGrid(resizeState.startSize.width - deltaX / gameState.scale);
+                    newHeight = snapSizeToGrid(resizeState.startSize.height + deltaY / gameState.scale);
+                    newX = resizeState.startPos.x + (resizeState.startSize.width - newWidth);
+                    break;
+                case 'ne': // northeast corner
+                    newWidth = snapSizeToGrid(resizeState.startSize.width + deltaX / gameState.scale);
+                    newHeight = snapSizeToGrid(resizeState.startSize.height - deltaY / gameState.scale);
+                    newY = resizeState.startPos.y + (resizeState.startSize.height - newHeight);
+                    break;
+                case 'nw': // northwest corner
+                    newWidth = snapSizeToGrid(resizeState.startSize.width - deltaX / gameState.scale);
+                    newHeight = snapSizeToGrid(resizeState.startSize.height - deltaY / gameState.scale);
+                    newX = resizeState.startPos.x + (resizeState.startSize.width - newWidth);
+                    newY = resizeState.startPos.y + (resizeState.startSize.height - newHeight);
+                    break;
+                case 'e': // east edge
+                    newWidth = snapSizeToGrid(resizeState.startSize.width + deltaX / gameState.scale);
+                    break;
+                case 'w': // west edge
+                    newWidth = snapSizeToGrid(resizeState.startSize.width - deltaX / gameState.scale);
+                    newX = resizeState.startPos.x + (resizeState.startSize.width - newWidth);
+                    break;
+                case 's': // south edge
+                    newHeight = snapSizeToGrid(resizeState.startSize.height + deltaY / gameState.scale);
+                    break;
+                case 'n': // north edge
+                    newHeight = snapSizeToGrid(resizeState.startSize.height - deltaY / gameState.scale);
+                    newY = resizeState.startPos.y + (resizeState.startSize.height - newHeight);
+                    break;
+            }
+
+            // Update token in game state
+            setGameState(prev => ({
+                ...prev,
+                tokens: prev.tokens.map(token =>
+                    token.id === prev.selectedToken.id
+                        ? { ...token, x: newX, y: newY, width: newWidth, height: newHeight }
+                        : token
+                )
+            }));
+        } else {
+            // Update cursor based on what's under the mouse
+            const canvas = canvasRef.current;
+            if (canvas && gameState.selectedToken) {
+                const selectedTokenData = gameState.tokens.find(t => t.id === gameState.selectedToken.id);
+                if (selectedTokenData && (selectedTokenData?.ownerId?._id || selectedTokenData?.ownerId) === user.user.id) {
+                    const resizeHandle = getResizeHandle(worldPos.x, worldPos.y, selectedTokenData);
+                    if (resizeHandle) {
+                        // Set cursor based on resize handle
+                        const cursors = {
+                            'se': 'se-resize', 'nw': 'nw-resize',
+                            'sw': 'sw-resize', 'ne': 'ne-resize',
+                            's': 's-resize', 'n': 'n-resize',
+                            'e': 'e-resize', 'w': 'w-resize'
+                        };
+                        canvas.style.cursor = cursors[resizeHandle] || 'default';
+                    } else {
+                        canvas.style.cursor = 'default';
+                    }
+                } else {
+                    canvas.style.cursor = 'default';
+                }
+            }
+        }
 
         if (gameState.isDragging && gameState.selectedToken) {
             // Handle token dragging - only for owned tokens
@@ -797,7 +1099,8 @@ const Play = () => {
                 )
             }));
 
-            socket.emit('tokenMove', {
+            // Use throttled emission to reduce network load
+            throttledTokenMove({
                 campaignId: campaignId,
                 tokenId: gameState.selectedToken.id,
                 x: newX,
@@ -817,8 +1120,8 @@ const Play = () => {
                 y: newY
             }));
 
-            // Optionally emit background position to other players
-            socket.emit('backgroundMove', {
+            // Optionally emit background position to other players (throttled)
+            throttledBackgroundUpdate({
                 x: newX,
                 y: newY,
                 playerId: user.user.id
@@ -827,15 +1130,67 @@ const Play = () => {
     };
 
     const handleMouseUp = async () => {
+        // Save token size to database if we were resizing a token
+        if (resizeState.isResizing && gameState.selectedToken && currentMap?._id) {
+            try {
+                const currentToken = gameState.tokens.find(token => token.id === gameState.selectedToken.id);
+                if (currentToken) {
+                    if (currentToken.isCharacterInstance) {
+                        // Update character instance position and size
+                        await axiosPrivate.patch(`/characters/${currentToken.characterId}/position/${currentMap._id}`, {
+                            x: currentToken.x,
+                            y: currentToken.y,
+                            width: currentToken.width,
+                            height: currentToken.height
+                        });
+                    } else {
+                        // Update legacy token position and size
+                        await axiosPrivate.patch(`/maps/${currentMap._id}/tokens/${gameState.selectedToken.id}`, {
+                            x: currentToken.x,
+                            y: currentToken.y,
+                            width: currentToken.width,
+                            height: currentToken.height
+                        });
+                    }
+                    
+                    // Emit real-time token size update
+                    socket.emit('tokenUpdate', {
+                        campaignId: campaignId,
+                        tokenId: gameState.selectedToken.id,
+                        x: currentToken.x,
+                        y: currentToken.y,
+                        width: currentToken.width,
+                        height: currentToken.height,
+                        playerId: user.user.id
+                    });
+                }
+            } catch (error) {
+                toast({
+                    title: "Warning",
+                    description: "Token size may not be saved",
+                    status: "warning"
+                });
+            }
+        }
+
         // Save token position to database if we were dragging a token
         if (gameState.isDragging && gameState.selectedToken && currentMap?._id) {
             try {
                 const currentToken = gameState.tokens.find(token => token.id === gameState.selectedToken.id);
                 if (currentToken) {
-                    await axiosPrivate.patch(`/maps/${currentMap._id}/tokens/${gameState.selectedToken.id}`, {
-                        x: currentToken.x,
-                        y: currentToken.y
-                    });
+                    if (currentToken.isCharacterInstance) {
+                        // Update character instance position
+                        await axiosPrivate.patch(`/characters/${currentToken.characterId}/position/${currentMap._id}`, {
+                            x: currentToken.x,
+                            y: currentToken.y
+                        });
+                    } else {
+                        // Update legacy token position
+                        await axiosPrivate.patch(`/maps/${currentMap._id}/tokens/${gameState.selectedToken.id}`, {
+                            x: currentToken.x,
+                            y: currentToken.y
+                        });
+                    }
                 }
             } catch (error) {
                 toast({
@@ -867,6 +1222,20 @@ const Play = () => {
             }
         }
 
+        // Send final position for any dragged token
+        if (gameState.isDragging && gameState.selectedToken) {
+            const currentToken = gameState.tokens.find(token => token.id === gameState.selectedToken.id);
+            if (currentToken) {
+                debouncedTokenMoveEnd({
+                    campaignId: campaignId,
+                    tokenId: gameState.selectedToken.id,
+                    x: currentToken.x,
+                    y: currentToken.y,
+                    playerId: user.user.id
+                });
+            }
+        }
+
         // Only clear dragging states, but preserve token selection
         setGameState(prev => ({
             ...prev,
@@ -876,6 +1245,16 @@ const Play = () => {
             ...prev,
             isDragging: false
         }));
+        setResizeState({
+            isResizing: false,
+            resizeHandle: null,
+            startSize: { width: 0, height: 0 },
+            startPos: { x: 0, y: 0 },
+            startMouse: { x: 0, y: 0 }
+        });
+
+        // Mark interaction as ended
+        markInteractionEnd();
     };
 
     // Mouse wheel handler for zoom - optimized for smoother scrolling
@@ -934,6 +1313,48 @@ const Play = () => {
         });
     };
 
+    const snapSizeToGrid = (size) => {
+        return Math.max(gridSettings.gridSize, Math.round(size / gridSettings.gridSize) * gridSettings.gridSize);
+    };
+
+    const getResizeHandle = (mouseX, mouseY, token) => {
+        if (!token) return null;
+
+        const handleSize = 8 / viewport.zoom;
+        const tokenRight = token.x + token.width * gameState.scale;
+        const tokenBottom = token.y + token.height * gameState.scale;
+
+        // Check corners first (higher priority)
+        if (Math.abs(mouseX - tokenRight) <= handleSize && Math.abs(mouseY - tokenBottom) <= handleSize) {
+            return 'se'; // southeast corner
+        }
+        if (Math.abs(mouseX - token.x) <= handleSize && Math.abs(mouseY - tokenBottom) <= handleSize) {
+            return 'sw'; // southwest corner
+        }
+        if (Math.abs(mouseX - tokenRight) <= handleSize && Math.abs(mouseY - token.y) <= handleSize) {
+            return 'ne'; // northeast corner
+        }
+        if (Math.abs(mouseX - token.x) <= handleSize && Math.abs(mouseY - token.y) <= handleSize) {
+            return 'nw'; // northwest corner
+        }
+
+        // Check edges
+        if (Math.abs(mouseX - tokenRight) <= handleSize && mouseY >= token.y && mouseY <= tokenBottom) {
+            return 'e'; // east edge
+        }
+        if (Math.abs(mouseX - token.x) <= handleSize && mouseY >= token.y && mouseY <= tokenBottom) {
+            return 'w'; // west edge
+        }
+        if (Math.abs(mouseY - tokenBottom) <= handleSize && mouseX >= token.x && mouseX <= tokenRight) {
+            return 's'; // south edge
+        }
+        if (Math.abs(mouseY - token.y) <= handleSize && mouseX >= token.x && mouseX <= tokenRight) {
+            return 'n'; // north edge
+        }
+
+        return null;
+    };
+
     const drawGrid = useCallback((ctx) => {
         // Skip grid drawing if grid is not visible or zoomed out too far
         if (!gridSettings.visible || viewport.zoom < 0.5) return;
@@ -961,10 +1382,18 @@ const Play = () => {
         }
     }, [gridSettings, gameState.mapDimensions, viewport.zoom]);
 
-    // Memoized render function for better performance
+    // Memoized render function for better performance during video calls
     const memoizedRenderGame = useCallback(() => {
+        // Skip rendering during heavy interactions to preserve video performance
+        if (performanceState.isHeavyInteraction && performanceState.interactionType === 'drag') {
+            // Reduce frame rate during dragging for better video performance
+            const now = Date.now();
+            if (now - performanceState.lastInteractionTime < 33) { // ~30fps instead of 60fps
+                return;
+            }
+        }
         renderGame();
-    }, [gameState, viewport, background]);
+    }, [gameState, viewport, background, performanceState]);
 
     // Animation loop - optimized with RAF
     useEffect(() => {
@@ -1019,6 +1448,44 @@ const Play = () => {
         }
     }, [campaign, isGM]);
 
+    // Load campaign characters when campaign and user data are available
+    useEffect(() => {
+        if (campaign && user.user.id) {
+            loadCampaignCharacters();
+            loadCampaignAssets();
+        }
+    }, [campaign, user.user.id]);
+
+    // Listen for character imports from D&D Beyond extension
+    useEffect(() => {
+        const handleCharacterImport = (event) => {
+            console.log('🎯 Character import detected from extension:', event.detail);
+            // Refresh the character list and assets when a character is imported
+            if (campaign && user.user.id) {
+                loadCampaignCharacters();
+                loadCampaignAssets(); // Also refresh assets in case a new default token was created
+            }
+        };
+
+        // Add event listener for character imports
+        window.addEventListener('vttless:character-imported', handleCharacterImport);
+
+        // Cleanup event listener on unmount
+        return () => {
+            window.removeEventListener('vttless:character-imported', handleCharacterImport);
+        };
+    }, [campaign, user.user.id]);
+
+    // Cleanup throttled functions on unmount
+    useEffect(() => {
+        return () => {
+            // Cancel any pending throttled/debounced calls
+            throttledTokenMove.cancel();
+            debouncedTokenMoveEnd.cancel();
+            throttledBackgroundUpdate.cancel();
+        };
+    }, [throttledTokenMove, debouncedTokenMoveEnd, throttledBackgroundUpdate]);
+
     const handleBackToMain = () => {
         navigate('/campaigns');
     };
@@ -1033,6 +1500,128 @@ const Play = () => {
             toast({
                 title: "Error loading maps",
                 description: "Failed to load campaign maps",
+                status: "error"
+            });
+        }
+    };
+
+    // Load campaign characters for current user
+    const loadCampaignCharacters = async () => {
+        if (!campaignId) return;
+        try {
+            const response = await axiosPrivate.get(`/campaigns/${campaignId}/characters/user`);
+            setCampaignCharacters(response.data);
+        } catch (error) {
+            toast({
+                title: "Error loading characters",  
+                description: "Failed to load campaign characters",
+                status: "error"
+            });
+        }
+    };
+
+    // Load campaign assets
+    const loadCampaignAssets = async () => {
+        if (!campaignId) return;
+        try {
+            const response = await axiosPrivate.get(`/assets/campaign/${campaignId}`);
+            setCampaignAssets(response.data || []);
+        } catch (error) {
+            console.error('Error loading campaign assets:', error);
+            setCampaignAssets([]);
+        }
+    };
+
+    // Handle character image update
+    const handleCharacterImageClick = (character) => {
+        setCharacterImageModal({
+            isOpen: true,
+            character: character
+        });
+    };
+
+    const handleCharacterImageUpdate = (updatedCharacter) => {
+        // Update the character in the campaign characters list
+        setCampaignCharacters(prev => 
+            prev.map(char => 
+                char._id === updatedCharacter._id ? updatedCharacter : char
+            )
+        );
+        
+        // Close the modal
+        setCharacterImageModal({
+            isOpen: false,
+            character: null
+        });
+    };
+
+    const handleCharacterImageModalClose = () => {
+        setCharacterImageModal({
+            isOpen: false,
+            character: null
+        });
+    };
+
+    // Add character to current map
+    const addCharacterToMap = async (characterId) => {
+        if (!currentMap) return;
+        
+        try {
+            // Place character at center of visible area with default size
+            const centerX = Math.round((400 / gridSettings.gridSize)) * gridSettings.gridSize;
+            const centerY = Math.round((300 / gridSettings.gridSize)) * gridSettings.gridSize;
+            
+            await axiosPrivate.post(`/characters/${characterId}/place/${currentMap._id}`, {
+                x: centerX,
+                y: centerY,
+                width: gridSettings.gridSize,
+                height: gridSettings.gridSize
+            });
+
+            // Reload the map to get updated character instances
+            const mapResponse = await axiosPrivate.get(`/maps/${currentMap._id}`);
+            setCurrentMap(mapResponse.data);
+            
+            // Initialize game state with the updated map
+            initializeGameState(mapResponse.data);
+
+            toast({
+                title: "Character Added",
+                description: "Character has been added to the map",
+                status: "success"
+            });
+        } catch (error) {
+            toast({
+                title: "Error",
+                description: error.response?.data?.message || "Failed to add character to map",
+                status: "error"
+            });
+        }
+    };
+
+    // Remove character from current map
+    const removeCharacterFromMap = async (characterId) => {
+        if (!currentMap) return;
+        
+        try {
+            await axiosPrivate.delete(`/characters/${characterId}/remove/${currentMap._id}`);
+
+            // Reload the map to get updated character instances
+            const mapResponse = await axiosPrivate.get(`/maps/${currentMap._id}`);
+            setCurrentMap(mapResponse.data);
+            
+            // Initialize game state with the updated map
+            initializeGameState(mapResponse.data);
+
+            toast({
+                title: "Character Removed",
+                description: "Character has been removed from the map",
+                status: "success"
+            });
+        } catch (error) {
+            toast({
+                title: "Error",
+                description: error.response?.data?.message || "Failed to remove character from map",
                 status: "error"
             });
         }
@@ -1158,9 +1747,17 @@ const Play = () => {
     };
 
     // Token name editing functions
-    const startEditingTokenName = (token) => {
-        setEditingToken(token.id);
-        setEditingName(token.name || '');
+    const startEditingTokenName = (tokenOrCharacter) => {
+        // Handle both token objects from game state and character objects from sidebar
+        if (tokenOrCharacter._id) {
+            // This is a character object from the sidebar
+            setEditingToken(tokenOrCharacter._id);
+            setEditingName(tokenOrCharacter.name || '');
+        } else {
+            // This is a token object from game state
+            setEditingToken(tokenOrCharacter.id);
+            setEditingName(tokenOrCharacter.name || '');
+        }
     };
 
     const cancelEditingTokenName = () => {
@@ -1170,6 +1767,9 @@ const Play = () => {
 
     const saveTokenName = async (tokenId) => {
         try {
+            // Find the token to determine if it's a character instance or legacy token
+            const token = gameState.tokens.find(t => t.id === tokenId);
+            
             // Update local state
             setGameState(prev => ({
                 ...prev,
@@ -1180,10 +1780,21 @@ const Play = () => {
                 )
             }));
 
-            // Update database
-            await axiosPrivate.patch(`/maps/${currentMap._id}/tokens/${tokenId}`, {
-                name: editingName
-            });
+            // Update database - different endpoints for character instances vs legacy tokens
+            if (token?.isCharacterInstance) {
+                // Update character name (affects all maps)
+                await axiosPrivate.patch(`/characters/${token.characterId}`, {
+                    name: editingName
+                });
+                
+                // Also refresh the campaign characters list
+                await loadCampaignCharacters();
+            } else {
+                // Update legacy token name
+                await axiosPrivate.patch(`/maps/${currentMap._id}/tokens/${tokenId}`, {
+                    name: editingName
+                });
+            }
 
             // Notify other players
             socket.emit('tokenUpdated', {
@@ -1311,6 +1922,7 @@ const Play = () => {
                     campaign={campaign}
                     isOpen={true}
                     isRightSidebar={true}
+                    performanceState={performanceState}
                 />
             </Box>
 
@@ -1845,27 +2457,41 @@ const Play = () => {
                                 </HStack>
                                 {!isCharacterSectionCollapsed && (
                                     <VStack spacing={3} align="stretch">
-                                    {userCharacters.length > 0 ? (
-                                        userCharacters.map((character, index) => (
-                                            <Card key={character.id || index} bg="gray.700" borderColor="gray.600">
+                                    {campaignCharacters.length > 0 ? (
+                                        campaignCharacters.map((character, index) => {
+                                            // Check if character is already on current map
+                                            const isOnCurrentMap = currentMap?.characterInstances?.some(
+                                                instance => instance.characterId._id === character._id || instance.characterId === character._id
+                                            );
+                                            
+                                            return (
+                                            <Card key={character._id || index} bg="gray.700" borderColor="gray.600">
                                                 <CardBody>
                                                     <HStack spacing={3}>
                                                         <Avatar
                                                             size="md"
-                                                            src={character.image?.src}
+                                                            src={character.assetId?.url}
                                                             bg="orange.400"
                                                             color="white"
                                                             name={character.name || `Character ${index + 1}`}
+                                                            cursor="pointer"
+                                                            _hover={{ 
+                                                                opacity: 0.8,
+                                                                transform: "scale(1.05)",
+                                                                transition: "all 0.2s"
+                                                            }}
+                                                            onClick={() => handleCharacterImageClick(character)}
+                                                            title="Click to update character image"
                                                         />
                                                         <Box flex={1}>
-                                                            {editingToken === character.id ? (
+                                                            {editingToken === character._id ? (
                                                                 <HStack spacing={2}>
                                                                     <Input
                                                                         value={editingName}
                                                                         onChange={(e) => setEditingName(e.target.value)}
                                                                         onKeyDown={(e) => {
                                                                             if (e.key === 'Enter') {
-                                                                                saveTokenName(character.id);
+                                                                                saveTokenName(`char_${character._id}`);
                                                                             } else if (e.key === 'Escape') {
                                                                                 cancelEditingTokenName();
                                                                             }
@@ -1881,7 +2507,7 @@ const Play = () => {
                                                                     <Button
                                                                         size="xs"
                                                                         colorScheme="orange"
-                                                                        onClick={() => saveTokenName(character.id)}
+                                                                        onClick={() => saveTokenName(`char_${character._id}`)}
                                                                     >
                                                                         Save
                                                                     </Button>
@@ -1906,13 +2532,36 @@ const Play = () => {
                                                                 </Text>
                                                             )}
                                                             <Text color="gray.400" fontSize="sm">
-                                                                Position: ({Math.round(character.x / gridSettings.gridSize)}, {Math.round(character.y / gridSettings.gridSize)})
+                                                                Level {character.level} • {isOnCurrentMap ? 'On Map' : 'Not on Map'}
                                                             </Text>
                                                         </Box>
+                                                        {currentMap && (
+                                                            <Box>
+                                                                {isOnCurrentMap ? (
+                                                                    <Button
+                                                                        size="sm"
+                                                                        colorScheme="red"
+                                                                        variant="outline"
+                                                                        onClick={() => removeCharacterFromMap(character._id)}
+                                                                    >
+                                                                        Remove
+                                                                    </Button>
+                                                                ) : (
+                                                                    <Button
+                                                                        size="sm"
+                                                                        colorScheme="orange"
+                                                                        onClick={() => addCharacterToMap(character._id)}
+                                                                    >
+                                                                        Add to Map
+                                                                    </Button>
+                                                                )}
+                                                            </Box>
+                                                        )}
                                                     </HStack>
                                                 </CardBody>
                                             </Card>
-                                        ))
+                                            );
+                                        })
                                     ) : (
                                         <Card bg="gray.700" borderColor="orange.400" borderWidth="2px" borderStyle="dashed">
                                             <CardBody py={6}>
@@ -1997,6 +2646,16 @@ const Play = () => {
                     </DrawerBody>
                 </DrawerContent>
             </Drawer>
+
+            {/* Character Image Update Modal */}
+            <CharacterImageUpdate
+                isOpen={characterImageModal.isOpen}
+                onClose={handleCharacterImageModalClose}
+                character={characterImageModal.character}
+                campaignId={campaignId}
+                onUpdate={handleCharacterImageUpdate}
+                campaignAssets={campaignAssets}
+            />
         </Box>
     );
 };

@@ -30,6 +30,20 @@ io.on("connection", (socket) => {
     socket.to(data.campaignId).emit("tokenMove", data);
   
   });
+
+  socket.on("tokenUpdate", (data) => {
+    console.log("Token Update Received by the Server");
+    console.log("Token update for campaign: " + data.campaignId + " and token: " + data.tokenId + " and player: " + data.playerId);
+    
+    socket.to(data.campaignId).emit("tokenUpdate", data);
+  });
+
+  socket.on("characterPlaced", (data) => {
+    console.log("Character Placed Received by the Server");
+    console.log("Character placement for campaign: " + data.campaignId + " and character: " + data.characterId + " and player: " + data.playerId);
+    
+    socket.to(data.campaignId).emit("characterPlaced", data);
+  });
   socket.on("joinCampaign", (campaignId) => {
     console.log("Joining campaign: " + campaignId + " for user: " + socket.id);
     socket.join(campaignId);

@@ -1,0 +1,24 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="95" fill="#2D3748" stroke="#ED8936" stroke-width="6"/>
+  
+  <!-- Character icon -->
+  <g transform="translate(100, 100)">
+    <!-- Head -->
+    <circle cx="0" cy="-25" r="20" fill="#ED8936"/>
+    
+    <!-- Body -->
+    <rect x="-15" y="-5" width="30" height="40" rx="8" fill="#ED8936"/>
+    
+    <!-- Arms -->
+    <rect x="-25" y="0" width="10" height="25" rx="5" fill="#ED8936"/>
+    <rect x="15" y="0" width="10" height="25" rx="5" fill="#ED8936"/>
+    
+    <!-- Legs -->
+    <rect x="-10" y="35" width="8" height="20" rx="4" fill="#ED8936"/>
+    <rect x="2" y="35" width="8" height="20" rx="4" fill="#ED8936"/>
+  </g>
+  
+  <!-- Border -->
+  <circle cx="100" cy="100" r="95" fill="none" stroke="#ED8936" stroke-width="3"/>
+</svg>

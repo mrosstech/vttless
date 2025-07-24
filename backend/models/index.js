@@ -12,6 +12,7 @@ db.Friend = require("./friend.js");
 db.ExternalFriend = require("./externalfriend.js");
 db.Map = require("./map.js");
 db.Asset = require("./asset.js");
+db.Character = require("./character.js");
 
 db.ROLES = ["user", "admin"];
 

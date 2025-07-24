@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
 import {
     Box,
     VStack,
@@ -41,7 +41,7 @@ if (typeof window !== 'undefined') {
     
 }
 
-const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isRightSidebar = false }) => {
+const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isRightSidebar = false, performanceState }) => {
     const [localStream, setLocalStream] = useState(null);
     const [peers, setPeers] = useState({});
     const [isVideoEnabled, setIsVideoEnabled] = useState(true);
@@ -51,11 +51,16 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
     const peersRef = useRef({});
     const toast = useToast();
 
-    // Initialize local media stream
+    // Initialize local media stream with adaptive quality
     const initializeLocalStream = useCallback(async () => {
         try {
+            // Reduce video quality during heavy interactions
+            const videoConstraints = performanceState?.isHeavyInteraction ? 
+                { width: 160, height: 120, frameRate: 15 } : 
+                { width: 320, height: 240, frameRate: 30 };
+                
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { width: 320, height: 240 },
+                video: videoConstraints,
                 audio: true
             });
             
@@ -78,7 +83,7 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                 duration: 5000
             });
         }
-    }, [toast]);
+    }, [toast, performanceState]);
 
     // Create peer connection for new user
     const createPeer = useCallback((userToSignal, stream, isInitiator) => {
@@ -374,6 +379,40 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
         }
     }, [localStream]);
 
+    // Dynamically adapt video quality based on performance state
+    useEffect(() => {
+        if (!localStream || !isInCall) return;
+
+        const videoTrack = localStream.getVideoTracks()[0];
+        if (!videoTrack) return;
+
+        const adaptVideoQuality = async () => {
+            try {
+                // Apply constraints based on performance state
+                if (performanceState?.isHeavyInteraction) {
+                    // Reduce quality during heavy interactions
+                    await videoTrack.applyConstraints({
+                        width: { ideal: 160 },
+                        height: { ideal: 120 },
+                        frameRate: { ideal: 15 }
+                    });
+                } else {
+                    // Restore normal quality when interactions end
+                    await videoTrack.applyConstraints({
+                        width: { ideal: 320 },
+                        height: { ideal: 240 },
+                        frameRate: { ideal: 30 }
+                    });
+                }
+            } catch (error) {
+                console.warn('Failed to adapt video quality:', error);
+            }
+        };
+
+        const timeoutId = setTimeout(adaptVideoQuality, 100); // Debounce quality changes
+        return () => clearTimeout(timeoutId);
+    }, [performanceState, localStream, isInCall]);
+
     // Initialize on component mount
     useEffect(() => {
         return () => {
@@ -559,4 +598,13 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
     );
 };
 
-export default VideoChat;
+export default memo(VideoChat, (prevProps, nextProps) => {
+    // Only re-render if essential props change
+    return (
+        prevProps.isOpen === nextProps.isOpen &&
+        prevProps.campaignId === nextProps.campaignId &&
+        prevProps.userId === nextProps.userId &&
+        prevProps.performanceState?.isHeavyInteraction === nextProps.performanceState?.isHeavyInteraction &&
+        prevProps.performanceState?.interactionType === nextProps.performanceState?.interactionType
+    );
+});

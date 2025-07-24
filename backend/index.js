@@ -41,6 +41,9 @@ app.use("/assets", assetsRoute);
 const mapsRoute = require("./routes/maps");
 app.use("/maps", mapsRoute);
 
+const charactersRoute = require("./routes/characters");
+app.use("/", charactersRoute);
+
 // Health check endpoint
 app.get("/health", (req, res) => {
     res.status(200).json({ status: "ok", service: "backend" });

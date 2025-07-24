@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VTTless D&D Beyond Integration</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="popup-container">
+        <!-- Header -->
+        <div class="popup-header">
+            <div class="logo">
+                <div class="logo-icon">🎲</div>
+                <h1>VTTless</h1>
+            </div>
+            <div class="connection-status" id="connection-status">
+                <span class="status-indicator"></span>
+                <span class="status-text">Checking...</span>
+            </div>
+        </div>
+
+        <!-- Character Info Section -->
+        <div class="section">
+            <h2>Current Character</h2>
+            <div class="character-info" id="character-info">
+                <div class="character-placeholder">
+                    <div class="placeholder-icon">👤</div>
+                    <p>No character detected</p>
+                    <small>Open a D&D Beyond character sheet to get started</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Actions Section -->
+        <div class="section">
+            <h2>Actions</h2>
+            <div class="actions">
+                <button class="btn btn-primary" id="sync-character" disabled>
+                    <span class="btn-icon">🔄</span>
+                    Sync Character
+                </button>
+                
+                <button class="btn btn-secondary" id="parse-character">
+                    <span class="btn-icon">📋</span>
+                    Parse Character
+                </button>
+                
+                <button class="btn btn-secondary" id="open-vttless">
+                    <span class="btn-icon">🎯</span>
+                    Open VTTless
+                </button>
+            </div>
+        </div>
+
+        <!-- Settings Section -->
+        <div class="section">
+            <h2>Settings</h2>
+            <div class="settings">
+                <div class="setting-item">
+                    <label for="vttless-url">VTTless URL:</label>
+                    <input type="url" id="vttless-url" placeholder="http://localhost:3000" />
+                </div>
+                
+                <div class="setting-item">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="auto-sync" />
+                        <span class="checkbox-custom"></span>
+                        Auto-sync characters
+                    </label>
+                </div>
+                
+                <div class="setting-item">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="debug-mode" />
+                        <span class="checkbox-custom"></span>
+                        Debug mode
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Section -->
+        <div class="section">
+            <h2>Status</h2>
+            <div class="status-info" id="status-info">
+                <div class="status-item">
+                    <span class="status-label">Last Sync:</span>
+                    <span class="status-value" id="last-sync">Never</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Characters:</span>
+                    <span class="status-value" id="character-count">0</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="popup-footer">
+            <button class="btn btn-link" id="test-connection">Test Connection</button>
+            <button class="btn btn-link" id="view-logs">View Logs</button>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="spinner"></div>
+        <p id="loading-text">Loading...</p>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
