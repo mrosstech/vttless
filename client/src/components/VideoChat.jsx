@@ -414,18 +414,65 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
             console.log(`📩 Received WebRTC offer from ${fromUserName} (${fromUserId})`);
             if (fromUserId === userId) return; // Ignore own offers
 
-            // Prevent duplicate connections and race conditions
+            // Handle existing peer connections properly
             if (peersRef.current[fromUserId]) {
-                console.log(`⚠️ Peer ${fromUserId} already exists, signaling existing peer`);
-                try {
-                    peersRef.current[fromUserId].peer.signal(signal);
-                } catch (error) {
-                    console.error(`❌ Error signaling existing peer ${fromUserId}:`, error);
+                const existingPeer = peersRef.current[fromUserId].peer;
+                const signalingState = existingPeer.signalingState;
+                
+                console.log(`⚠️ Peer ${fromUserId} already exists with state: ${signalingState}`);
+                
+                // If the existing peer is in a state that can handle new offers, use it
+                if (signalingState === 'stable' || signalingState === 'closed' || existingPeer.destroyed) {
+                    console.log(`🔄 Recreating peer connection for ${fromUserId} (was in ${signalingState} state)`);
+                    
+                    // Clean up the existing peer connection
+                    try {
+                        if (!existingPeer.destroyed) {
+                            existingPeer.removeAllListeners();
+                            existingPeer.destroy();
+                        }
+                    } catch (error) {
+                        console.warn('Error destroying existing peer:', error);
+                    }
+                    
+                    // Remove from state
+                    delete peersRef.current[fromUserId];
+                    setPeers(prevPeers => {
+                        const newPeers = { ...prevPeers };
+                        delete newPeers[fromUserId];
+                        return newPeers;
+                    });
+                } else if (signalingState === 'have-local-offer') {
+                    // We already sent an offer, let the other side handle our offer instead
+                    console.log(`⏭️ Ignoring offer from ${fromUserId}, we already sent an offer (avoiding glare)`);
+                    return;
+                } else {
+                    // Peer is in a state where it can handle the offer
+                    console.log(`📡 Signaling existing peer ${fromUserId} in state: ${signalingState}`);
+                    try {
+                        existingPeer.signal(signal);
+                    } catch (error) {
+                        console.error(`❌ Error signaling existing peer ${fromUserId}:`, error);
+                        // If signaling fails, recreate the peer
+                        try {
+                            existingPeer.removeAllListeners();
+                            existingPeer.destroy();
+                        } catch (e) {
+                            console.warn('Error destroying failed peer:', e);
+                        }
+                        delete peersRef.current[fromUserId];
+                        setPeers(prevPeers => {
+                            const newPeers = { ...prevPeers };
+                            delete newPeers[fromUserId];
+                            return newPeers;
+                        });
+                    }
+                    return;
                 }
-                return;
             }
 
-            if (localStream) {
+            // Create new peer connection if no existing peer or existing peer was cleaned up
+            if (localStream && !peersRef.current[fromUserId]) {
                 console.log(`🔄 Creating receiver connection from ${fromUserName}`);
                 const peer = createPeer(fromUserId, localStream, false);
                 peersRef.current[fromUserId] = { peer, userName: fromUserName };
@@ -453,7 +500,7 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                         return newPeers;
                     });
                 }
-            } else {
+            } else if (!localStream) {
                 console.warn(`❌ No local stream available for offer from ${fromUserName}`);
             }
         };
@@ -462,10 +509,35 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
             console.log(`📨 Received WebRTC answer from ${fromUserId}`);
             
             if (peersRef.current[fromUserId]) {
-                try {
-                    peersRef.current[fromUserId].peer.signal(signal);
-                } catch (error) {
-                    console.error(`❌ Error processing answer from ${fromUserId}:`, error);
+                const existingPeer = peersRef.current[fromUserId].peer;
+                const signalingState = existingPeer.signalingState;
+                
+                console.log(`📡 Processing answer from ${fromUserId} (peer state: ${signalingState})`);
+                
+                // Only process answer if peer is in correct state
+                if (signalingState === 'have-local-offer') {
+                    try {
+                        existingPeer.signal(signal);
+                    } catch (error) {
+                        console.error(`❌ Error processing answer from ${fromUserId}:`, error);
+                        // Clean up failed peer connection
+                        try {
+                            existingPeer.removeAllListeners();
+                            existingPeer.destroy();
+                        } catch (e) {
+                            console.warn('Error destroying failed peer after answer error:', e);
+                        }
+                        delete peersRef.current[fromUserId];
+                        setPeers(prevPeers => {
+                            const newPeers = { ...prevPeers };
+                            delete newPeers[fromUserId];
+                            return newPeers;
+                        });
+                    }
+                } else if (existingPeer.destroyed) {
+                    console.warn(`⚠️ Received answer for destroyed peer ${fromUserId}`);
+                } else {
+                    console.warn(`⚠️ Received answer from ${fromUserId} but peer is in wrong state: ${signalingState}`);
                 }
             } else {
                 console.warn(`⚠️ Received answer from unknown peer ${fromUserId}`);
@@ -473,13 +545,21 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
         };
 
         const handleWebRTCIceCandidate = ({ fromUserId, signal }) => {
-            console.log(`🧊 Received ICE candidate from ${fromUserId}`);
+            // Don't log every ICE candidate to reduce console noise
             
             if (peersRef.current[fromUserId]) {
-                try {
-                    peersRef.current[fromUserId].peer.signal(signal);
-                } catch (error) {
-                    console.error(`❌ Error processing ICE candidate from ${fromUserId}:`, error);
+                const existingPeer = peersRef.current[fromUserId].peer;
+                
+                // ICE candidates can be processed in any state except closed/destroyed
+                if (!existingPeer.destroyed && existingPeer.signalingState !== 'closed') {
+                    try {
+                        existingPeer.signal(signal);
+                    } catch (error) {
+                        console.error(`❌ Error processing ICE candidate from ${fromUserId}:`, error);
+                        // Don't destroy peer for ICE candidate errors, they're less critical
+                    }
+                } else {
+                    console.warn(`⚠️ Received ICE candidate for ${existingPeer.destroyed ? 'destroyed' : 'closed'} peer ${fromUserId}`);
                 }
             } else {
                 console.warn(`⚠️ Received ICE candidate from unknown peer ${fromUserId}`);
