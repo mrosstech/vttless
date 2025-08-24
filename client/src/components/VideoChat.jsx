@@ -49,6 +49,7 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
     const [isInCall, setIsInCall] = useState(false);
     const localVideoRef = useRef(null);
     const peersRef = useRef({});
+    const lastOfferReceived = useRef({}); // Track last offer time per user
     const toast = useToast();
 
     // Initialize local media stream with fixed quality to prevent disconnections
@@ -393,7 +394,11 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
             if (localStream) {
                 console.log(`🔄 Creating initiator connection to ${joinedUserName}`);
                 const peer = createPeer(joinedUserId, localStream, true);
-                peersRef.current[joinedUserId] = { peer, userName: joinedUserName };
+                peersRef.current[joinedUserId] = { 
+                    peer, 
+                    userName: joinedUserName, 
+                    createdAt: Date.now() 
+                };
                 
                 // Add to peers state immediately
                 setPeers(prevPeers => ({
@@ -413,61 +418,107 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
         const handleWebRTCOffer = ({ fromUserId, signal, userName: fromUserName }) => {
             console.log(`📩 Received WebRTC offer from ${fromUserName} (${fromUserId})`);
             if (fromUserId === userId) return; // Ignore own offers
+            
+            // Debounce rapid offers from the same user
+            const now = Date.now();
+            const lastOffer = lastOfferReceived.current[fromUserId];
+            if (lastOffer && (now - lastOffer) < 500) { // Ignore offers within 500ms
+                console.log(`🚫 Debouncing rapid offer from ${fromUserId} (${now - lastOffer}ms ago)`);
+                return;
+            }
+            lastOfferReceived.current[fromUserId] = now;
 
             // Handle existing peer connections properly
             if (peersRef.current[fromUserId]) {
                 const existingPeer = peersRef.current[fromUserId].peer;
-                const signalingState = existingPeer.signalingState;
                 
-                console.log(`⚠️ Peer ${fromUserId} already exists with state: ${signalingState}`);
-                
-                // If the existing peer is in a state that can handle new offers, use it
-                if (signalingState === 'stable' || signalingState === 'closed' || existingPeer.destroyed) {
-                    console.log(`🔄 Recreating peer connection for ${fromUserId} (was in ${signalingState} state)`);
-                    
-                    // Clean up the existing peer connection
-                    try {
-                        if (!existingPeer.destroyed) {
-                            existingPeer.removeAllListeners();
-                            existingPeer.destroy();
-                        }
-                    } catch (error) {
-                        console.warn('Error destroying existing peer:', error);
-                    }
-                    
-                    // Remove from state
+                // Check if peer is valid and not destroyed
+                if (!existingPeer || existingPeer.destroyed) {
+                    console.log(`🧹 Cleaning up destroyed peer ${fromUserId}`);
                     delete peersRef.current[fromUserId];
                     setPeers(prevPeers => {
                         const newPeers = { ...prevPeers };
                         delete newPeers[fromUserId];
                         return newPeers;
                     });
-                } else if (signalingState === 'have-local-offer') {
-                    // We already sent an offer, let the other side handle our offer instead
-                    console.log(`⏭️ Ignoring offer from ${fromUserId}, we already sent an offer (avoiding glare)`);
-                    return;
                 } else {
-                    // Peer is in a state where it can handle the offer
-                    console.log(`📡 Signaling existing peer ${fromUserId} in state: ${signalingState}`);
-                    try {
-                        existingPeer.signal(signal);
-                    } catch (error) {
-                        console.error(`❌ Error signaling existing peer ${fromUserId}:`, error);
-                        // If signaling fails, recreate the peer
+                    const signalingState = existingPeer.signalingState;
+                    const peerData = peersRef.current[fromUserId];
+                    const isNewlyCreated = peerData.createdAt && (Date.now() - peerData.createdAt) < 1000; // Less than 1 second old
+                    
+                    console.log(`⚠️ Peer ${fromUserId} already exists with state: ${signalingState || 'unknown'} (age: ${peerData.createdAt ? Date.now() - peerData.createdAt : 'unknown'}ms)`);
+                    
+                    // If peer is newly created and state is undefined, allow some time for initialization
+                    if (!signalingState && isNewlyCreated) {
+                        console.log(`⏳ Newly created peer ${fromUserId}, allowing initialization time`);
+                        // Try to signal it anyway, as it might be ready
+                        try {
+                            existingPeer.signal(signal);
+                        } catch (error) {
+                            console.error(`❌ Error signaling newly created peer ${fromUserId}:`, error);
+                            // If it fails, recreate it
+                            try {
+                                existingPeer.removeAllListeners();
+                                existingPeer.destroy();
+                            } catch (e) {
+                                console.warn('Error destroying failed new peer:', e);
+                            }
+                            delete peersRef.current[fromUserId];
+                            setPeers(prevPeers => {
+                                const newPeers = { ...prevPeers };
+                                delete newPeers[fromUserId];
+                                return newPeers;
+                            });
+                        }
+                        return;
+                    }
+                    
+                    // If signalingState is undefined for an older peer, or peer is in problematic state, recreate
+                    if ((!signalingState && !isNewlyCreated) || signalingState === 'stable' || signalingState === 'closed') {
+                        console.log(`🔄 Recreating peer connection for ${fromUserId} (state: ${signalingState || 'undefined'}, age: ${peerData.createdAt ? Date.now() - peerData.createdAt : 'unknown'}ms)`);
+                        
+                        // Clean up the existing peer connection
                         try {
                             existingPeer.removeAllListeners();
                             existingPeer.destroy();
-                        } catch (e) {
-                            console.warn('Error destroying failed peer:', e);
+                        } catch (error) {
+                            console.warn('Error destroying existing peer:', error);
                         }
+                        
+                        // Remove from state
                         delete peersRef.current[fromUserId];
                         setPeers(prevPeers => {
                             const newPeers = { ...prevPeers };
                             delete newPeers[fromUserId];
                             return newPeers;
                         });
+                    } else if (signalingState === 'have-local-offer') {
+                        // We already sent an offer, let the other side handle our offer instead
+                        console.log(`⏭️ Ignoring offer from ${fromUserId}, we already sent an offer (avoiding glare)`);
+                        return;
+                    } else {
+                        // Peer is in a state where it can handle the offer
+                        console.log(`📡 Signaling existing peer ${fromUserId} in state: ${signalingState}`);
+                        try {
+                            existingPeer.signal(signal);
+                        } catch (error) {
+                            console.error(`❌ Error signaling existing peer ${fromUserId}:`, error);
+                            // If signaling fails, recreate the peer
+                            try {
+                                existingPeer.removeAllListeners();
+                                existingPeer.destroy();
+                            } catch (e) {
+                                console.warn('Error destroying failed peer:', e);
+                            }
+                            delete peersRef.current[fromUserId];
+                            setPeers(prevPeers => {
+                                const newPeers = { ...prevPeers };
+                                delete newPeers[fromUserId];
+                                return newPeers;
+                            });
+                        }
+                        return;
                     }
-                    return;
                 }
             }
 
@@ -475,7 +526,11 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
             if (localStream && !peersRef.current[fromUserId]) {
                 console.log(`🔄 Creating receiver connection from ${fromUserName}`);
                 const peer = createPeer(fromUserId, localStream, false);
-                peersRef.current[fromUserId] = { peer, userName: fromUserName };
+                peersRef.current[fromUserId] = { 
+                    peer, 
+                    userName: fromUserName, 
+                    createdAt: Date.now() 
+                };
                 
                 // Add to peers state immediately
                 setPeers(prevPeers => ({
@@ -510,14 +565,32 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
             
             if (peersRef.current[fromUserId]) {
                 const existingPeer = peersRef.current[fromUserId].peer;
+                
+                // Check if peer is valid and not destroyed
+                if (!existingPeer || existingPeer.destroyed) {
+                    console.warn(`⚠️ Received answer for destroyed/invalid peer ${fromUserId}`);
+                    delete peersRef.current[fromUserId];
+                    setPeers(prevPeers => {
+                        const newPeers = { ...prevPeers };
+                        delete newPeers[fromUserId];
+                        return newPeers;
+                    });
+                    return;
+                }
+                
                 const signalingState = existingPeer.signalingState;
+                const peerData = peersRef.current[fromUserId];
+                const isNewlyCreated = peerData.createdAt && (Date.now() - peerData.createdAt) < 2000; // Less than 2 seconds old
                 
-                console.log(`📡 Processing answer from ${fromUserId} (peer state: ${signalingState})`);
+                console.log(`📡 Processing answer from ${fromUserId} (peer state: ${signalingState || 'unknown'}, age: ${peerData.createdAt ? Date.now() - peerData.createdAt : 'unknown'}ms)`);
                 
-                // Only process answer if peer is in correct state
-                if (signalingState === 'have-local-offer') {
+                // Process answer if peer is in correct state OR if it's newly created (signaling state might not be ready yet)
+                if (signalingState === 'have-local-offer' || (!signalingState && isNewlyCreated)) {
                     try {
                         existingPeer.signal(signal);
+                        if (!signalingState && isNewlyCreated) {
+                            console.log(`✅ Successfully processed answer for newly created peer ${fromUserId}`);
+                        }
                     } catch (error) {
                         console.error(`❌ Error processing answer from ${fromUserId}:`, error);
                         // Clean up failed peer connection
@@ -534,10 +607,8 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                             return newPeers;
                         });
                     }
-                } else if (existingPeer.destroyed) {
-                    console.warn(`⚠️ Received answer for destroyed peer ${fromUserId}`);
                 } else {
-                    console.warn(`⚠️ Received answer from ${fromUserId} but peer is in wrong state: ${signalingState}`);
+                    console.warn(`⚠️ Received answer from ${fromUserId} but peer is in wrong state: ${signalingState || 'unknown'} (age: ${peerData.createdAt ? Date.now() - peerData.createdAt : 'unknown'}ms)`);
                 }
             } else {
                 console.warn(`⚠️ Received answer from unknown peer ${fromUserId}`);
@@ -549,6 +620,18 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
             
             if (peersRef.current[fromUserId]) {
                 const existingPeer = peersRef.current[fromUserId].peer;
+                
+                // Check if peer is valid first
+                if (!existingPeer) {
+                    console.warn(`⚠️ Received ICE candidate for invalid peer ${fromUserId}`);
+                    delete peersRef.current[fromUserId];
+                    setPeers(prevPeers => {
+                        const newPeers = { ...prevPeers };
+                        delete newPeers[fromUserId];
+                        return newPeers;
+                    });
+                    return;
+                }
                 
                 // ICE candidates can be processed in any state except closed/destroyed
                 if (!existingPeer.destroyed && existingPeer.signalingState !== 'closed') {
