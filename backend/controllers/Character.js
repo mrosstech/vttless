@@ -1,5 +1,5 @@
 // backend/controllers/Character.js
-const { Character, Campaign, Map } = require("../models");
+const { Character, Campaign, Map, Asset } = require("../models");
 
 // Get all characters for a campaign
 exports.getCampaignCharacters = async (req, res) => {
@@ -61,12 +61,123 @@ exports.getUserCampaignCharacters = async (req, res) => {
             return res.status(403).json({ message: "Access denied" });
         }
 
-        const characters = await Character.find({
+        // Try new Character model first
+        let characters = await Character.find({
             campaignId,
             ownerId: req.user._id
         })
         .populate('assetId')
         .sort({ created: -1 });
+
+        console.log(`🔍 Found ${characters.length} characters in new model for user ${req.user._id} in campaign ${campaignId}`);
+
+        // Check for legacy token assets that haven't been migrated yet
+        const existingAssetIds = characters.map(char => char.assetId._id.toString());
+        console.log('🔄 Checking for legacy token assets to migrate...');
+        
+        const legacyAssets = await Asset.find({
+            campaign: campaignId,
+            uploadedBy: req.user._id,
+            type: 'token',
+            status: 'active',
+            _id: { $nin: existingAssetIds } // Only assets not already converted
+        }).sort({ created: -1 });
+
+        console.log(`📦 Found ${legacyAssets.length} legacy token assets to migrate`);
+
+        // Auto-migrate legacy assets to characters
+        const migratedCharacters = [];
+        for (const asset of legacyAssets) {
+            try {
+                const newCharacter = new Character({
+                    name: asset.name || 'Imported Character',
+                    campaignId,
+                    ownerId: req.user._id,
+                    assetId: asset._id,
+                    level: 1,
+                    hitPoints: 0,
+                    maxHitPoints: 0,
+                    armorClass: 10,
+                    defaultSize: { width: 40, height: 40 },
+                    notes: 'Auto-migrated from legacy token',
+                    properties: { migrated: true, originalAssetId: asset._id }
+                });
+
+                await newCharacter.save();
+                await newCharacter.populate('assetId');
+                migratedCharacters.push(newCharacter);
+                
+                console.log(`✅ Migrated legacy asset "${asset.name}" to character`);
+            } catch (migrationError) {
+                console.error(`❌ Failed to migrate asset ${asset._id}:`, migrationError);
+            }
+        }
+
+        // Combine existing characters with newly migrated ones
+        characters = [...characters, ...migratedCharacters];
+        
+        if (migratedCharacters.length > 0) {
+            console.log(`🎉 Successfully migrated ${migratedCharacters.length} additional characters`);
+            
+            // Clean up legacy tokens that have been migrated to characters
+            const migratedAssetIds = migratedCharacters.map(char => char.assetId._id);
+            
+            try {
+                // Find maps with legacy tokens that need to be migrated
+                const mapsWithLegacyTokens = await Map.find({
+                    campaign: campaignId,
+                    'tokens.assetId': { $in: migratedAssetIds },
+                    'tokens.ownerId': req.user._id
+                });
+                
+                for (const map of mapsWithLegacyTokens) {
+                    const legacyTokensToMigrate = map.tokens.filter(token => 
+                        migratedAssetIds.some(id => id.equals(token.assetId)) && 
+                        token.ownerId.equals(req.user._id)
+                    );
+                    
+                    for (const legacyToken of legacyTokensToMigrate) {
+                        // Find the corresponding migrated character
+                        const migratedCharacter = migratedCharacters.find(char => 
+                            char.assetId._id.equals(legacyToken.assetId)
+                        );
+                        
+                        if (migratedCharacter) {
+                            // Check if character instance already exists on this map
+                            const existingInstance = map.characterInstances.find(instance => 
+                                instance.characterId.equals(migratedCharacter._id)
+                            );
+                            
+                            if (!existingInstance) {
+                                // Migrate the legacy token position to a character instance
+                                map.characterInstances.push({
+                                    characterId: migratedCharacter._id,
+                                    x: legacyToken.x,
+                                    y: legacyToken.y,
+                                    width: legacyToken.width || 40,
+                                    height: legacyToken.height || 40,
+                                    visible: true
+                                });
+                                
+                                console.log(`📍 Migrated legacy token position for character "${migratedCharacter.name}" on map "${map.name}"`);
+                            }
+                        }
+                    }
+                    
+                    // Remove the legacy tokens
+                    map.tokens = map.tokens.filter(token => 
+                        !(migratedAssetIds.some(id => id.equals(token.assetId)) && 
+                          token.ownerId.equals(req.user._id))
+                    );
+                    
+                    await map.save();
+                }
+                
+                console.log(`🧹 Processed ${mapsWithLegacyTokens.length} maps and migrated legacy token positions`);
+            } catch (cleanupError) {
+                console.error('❌ Error cleaning up legacy tokens:', cleanupError);
+            }
+        }
 
         res.json(characters);
     } catch (error) {
