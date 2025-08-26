@@ -14,12 +14,10 @@ const s3Client = new S3Client({
 });
 
 exports.getProfilePhotoUploadUrl = async (req, res) => {
-    console.log("Getting profile photo upload URL")
     try {
         const userId = req.user._id;
         const fileExtension = '.jpeg'; // You might want to make this dynamic based on file type
         const fileName = `${userId}/profile/${crypto.randomBytes(16).toString('hex')}${fileExtension}`;
-        console.log("File name: ", fileName)
         const environment = process.env.NODE_ENV || 'development';
         const command = new PutObjectCommand({
             Bucket: process.env.AWS_S3_BUCKET_NAME,
@@ -29,8 +27,6 @@ exports.getProfilePhotoUploadUrl = async (req, res) => {
 
         const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
         const photoUrl = `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${environment}/profiles/${fileName}`;
-        console.log("Photo URL: " + photoUrl)
-        console.log("Upload URL: " + uploadUrl)
         res.json({
             uploadUrl,
             photoUrl
@@ -42,7 +38,6 @@ exports.getProfilePhotoUploadUrl = async (req, res) => {
 };
 
 exports.updateProfilePhoto = async (req, res) => {
-    console.log("Updating profile photo")
     try {
         const { photoUrl } = req.body;
         const userId = req.user._id;
@@ -58,10 +53,8 @@ exports.updateProfilePhoto = async (req, res) => {
 };
 
 exports.getProfilePhotoDownloadUrl = async (req, res) => {
-    console.log("Getting profile photo download URL")
     try {
         const photoUrl = req.user.photoUrl;
-        console.log("Photo URL: " + photoUrl);
         const key = photoUrl.split('.com/')[1];
         const command = new GetObjectCommand({
             Bucket: process.env.AWS_S3_BUCKET_NAME,
@@ -69,7 +62,6 @@ exports.getProfilePhotoDownloadUrl = async (req, res) => {
             ContentType: 'image/jpeg', // Make this dynamic based on file type
         });
         const downloadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
-        console.log("Download URL: " + downloadUrl)
         res.json({
             downloadUrl
         });

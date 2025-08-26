@@ -134,7 +134,7 @@ const CharacterImageUpdate = ({
     };
 
     // Filter campaign assets to only show token-type assets
-    const tokenAssets = campaignAssets.filter(asset => 
+    const tokenAssets = (campaignAssets || []).filter(asset => 
         asset.type === 'token' && asset.status === 'active'
     );
 
@@ -201,7 +201,7 @@ const CharacterImageUpdate = ({
                                         />
                                     ) : selectedAssetId ? (
                                         <Image
-                                            src={campaignAssets.find(a => a._id === selectedAssetId)?.url}
+                                            src={(campaignAssets || []).find(a => a._id === selectedAssetId)?.url}
                                             alt="Selected asset"
                                             width="100%"
                                             height="100%"
@@ -293,6 +293,6 @@ export default React.memo(CharacterImageUpdate, (prevProps, nextProps) => {
     return (
         prevProps.isOpen === nextProps.isOpen &&
         prevProps.character?._id === nextProps.character?._id &&
-        prevProps.campaignAssets.length === nextProps.campaignAssets.length
+        (prevProps.campaignAssets?.length || 0) === (nextProps.campaignAssets?.length || 0)
     );
 });

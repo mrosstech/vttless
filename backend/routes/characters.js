@@ -3,6 +3,10 @@ const router = express.Router();
 const passport = require('passport');
 const CharacterController = require("../controllers/Character");
 
+// General character routes
+router.get("/characters", passport.authenticate('jwt', {session: false}), CharacterController.getAllUserCharacters);
+router.post("/characters", passport.authenticate('jwt', {session: false}), CharacterController.createUserCharacter);
+
 // Campaign character routes
 router.get("/campaigns/:campaignId/characters", passport.authenticate('jwt', {session: false}), CharacterController.getCampaignCharacters);
 router.get("/campaigns/:campaignId/characters/user", passport.authenticate('jwt', {session: false}), CharacterController.getUserCampaignCharacters);

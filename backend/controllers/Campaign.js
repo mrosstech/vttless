@@ -6,8 +6,6 @@ const Friend = require('../models/friend');
 
 exports.list = async (req, res) => {
     try {
-        console.log("Starting list users...");
-        console.log("User: " + req.user._id);
 
         // First get the user's friends list
         const user = await User.findById(req.user._id).populate('friends');
@@ -31,7 +29,6 @@ exports.list = async (req, res) => {
                 : friendship.requestor.toString()
         );
 
-        console.log("Friends IDs:", friendIds);
 
         // Find campaigns where:
         // 1. User is GM
@@ -52,19 +49,16 @@ exports.list = async (req, res) => {
         .populate('maps')
         .sort({ created: -1 }); // Most recent first
 
-        console.log("Campaigns: " + campaigns);
         
         // Add a flag to indicate if this is a friend's campaign
         const campaignsWithMetadata = campaigns.map(campaign => {
             const gmId = campaign.gm._id.toString();
-            console.log("Campaign GM ID: " + gmId);
             const isFriendsCampaign = friendIds.includes(gmId);
             return {
                 ...campaign.toObject(),
                 isFriendsCampaign
             };
         });
-        console.log(campaignsWithMetadata[1]);
         res.json(campaignsWithMetadata);
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -153,7 +147,6 @@ exports.join = async (req, res) => {
 
 exports.get = async (req, res) => {
     try {
-        console.log("Trying to find campaign with ID: " + req.params.id);
         const campaign = await Campaign.findById(req.params.id)
             .populate('gm', 'username email')
             .populate('players', 'username email')

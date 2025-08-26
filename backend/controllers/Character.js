@@ -1,6 +1,158 @@
 // backend/controllers/Character.js
 const { Character, Campaign, Map, Asset } = require("../models");
 
+// Migration helper to convert old ability format to new format
+const migrateCharacterAbilities = (character) => {
+    if (!character.abilities) return character;
+    
+    const abilityNames = ['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma'];
+    const needsMigration = abilityNames.some(ability => 
+        character.abilities[ability] && typeof character.abilities[ability] === 'number'
+    );
+    
+    if (needsMigration) {
+        console.log(`🔄 Migrating abilities for character ${character.name}`);
+        abilityNames.forEach(ability => {
+            if (character.abilities[ability] && typeof character.abilities[ability] === 'number') {
+                const score = character.abilities[ability];
+                character.abilities[ability] = {
+                    score: score,
+                    modifier: Math.floor((score - 10) / 2)
+                };
+            }
+        });
+        console.log(`✅ Migrated abilities:`, character.abilities);
+    }
+    
+    return character;
+};
+
+// Get all characters for the current user across all campaigns
+exports.getAllUserCharacters = async (req, res) => {
+    try {
+        // Get all characters owned by the current user
+        const characters = await Character.find({
+            ownerId: req.user._id
+        })
+        .populate('ownerId', 'username')
+        .populate('assetId')
+        .populate('campaignId', 'name') // Include campaign name for display
+        .sort({ created: -1 });
+
+        // Migrate characters with old ability format
+        const migratedCharacters = characters.map(character => {
+            const migrated = migrateCharacterAbilities(character);
+            if (migrated !== character) {
+                // Save the migrated character
+                migrated.save().catch(err => console.error('Migration save error:', err));
+            }
+            return migrated;
+        });
+
+        res.json(migratedCharacters);
+    } catch (error) {
+        console.error("Error fetching user characters:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+// Create a new character (general, not campaign-specific)
+exports.createUserCharacter = async (req, res) => {
+    try {
+        const { 
+            name, 
+            class: characterClass,
+            level = 1,
+            race,
+            background,
+            alignment,
+            hitPoints = { max: 0, current: 0 },
+            armorClass = 10,
+            speed = 30,
+            abilities = {
+                strength: { score: 10, modifier: 0 },
+                dexterity: { score: 10, modifier: 0 },
+                constitution: { score: 10, modifier: 0 },
+                intelligence: { score: 10, modifier: 0 },
+                wisdom: { score: 10, modifier: 0 },
+                charisma: { score: 10, modifier: 0 }
+            },
+            savingThrows = {},
+            skills = {},
+            attacks = [],
+            spells = [],
+            feats = [],
+            inventory = [],
+            notes = '',
+            assetId,
+            campaignId // Optional - can be null for general characters
+        } = req.body;
+
+        // Validate required fields
+        if (!name || !name.trim()) {
+            return res.status(400).json({
+                message: 'Character name is required'
+            });
+        }
+
+        // If campaignId is provided, verify user has access to that campaign
+        if (campaignId) {
+            const campaign = await Campaign.findById(campaignId);
+            if (!campaign) {
+                return res.status(404).json({ message: "Campaign not found" });
+            }
+
+            const isGM = campaign.gm.toString() === req.user._id.toString();
+            const isPlayer = campaign.players.some(player => 
+                player.toString() === req.user._id.toString()
+            );
+
+            if (!isGM && !isPlayer) {
+                return res.status(403).json({ message: "Access denied to campaign" });
+            }
+        }
+
+        const newCharacter = new Character({
+            name: name.trim(),
+            class: characterClass,
+            level,
+            race,
+            background,
+            alignment,
+            hitPoints,
+            armorClass,
+            speed,
+            abilities,
+            savingThrows,
+            skills,
+            attacks,
+            spells,
+            feats,
+            inventory,
+            notes,
+            ownerId: req.user._id,
+            assetId: assetId,
+            campaignId: campaignId,
+            defaultSize: { width: 40, height: 40 },
+            properties: {}
+        });
+
+        await newCharacter.save();
+
+        // Populate the response
+        await newCharacter.populate('ownerId', 'username');
+        await newCharacter.populate('assetId');
+        if (campaignId) {
+            await newCharacter.populate('campaignId', 'name');
+        }
+
+        res.status(201).json(newCharacter);
+    } catch (error) {
+        console.error("Error creating character:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
 // Get all characters for a campaign
 exports.getCampaignCharacters = async (req, res) => {
     try {
@@ -69,11 +221,9 @@ exports.getUserCampaignCharacters = async (req, res) => {
         .populate('assetId')
         .sort({ created: -1 });
 
-        console.log(`🔍 Found ${characters.length} characters in new model for user ${req.user._id} in campaign ${campaignId}`);
 
         // Check for legacy token assets that haven't been migrated yet
         const existingAssetIds = characters.map(char => char.assetId._id.toString());
-        console.log('🔄 Checking for legacy token assets to migrate...');
         
         const legacyAssets = await Asset.find({
             campaign: campaignId,
@@ -83,7 +233,6 @@ exports.getUserCampaignCharacters = async (req, res) => {
             _id: { $nin: existingAssetIds } // Only assets not already converted
         }).sort({ created: -1 });
 
-        console.log(`📦 Found ${legacyAssets.length} legacy token assets to migrate`);
 
         // Auto-migrate legacy assets to characters
         const migratedCharacters = [];
@@ -95,8 +244,7 @@ exports.getUserCampaignCharacters = async (req, res) => {
                     ownerId: req.user._id,
                     assetId: asset._id,
                     level: 1,
-                    hitPoints: 0,
-                    maxHitPoints: 0,
+                    hitPoints: { max: 0, current: 0 },
                     armorClass: 10,
                     defaultSize: { width: 40, height: 40 },
                     notes: 'Auto-migrated from legacy token',
@@ -107,9 +255,8 @@ exports.getUserCampaignCharacters = async (req, res) => {
                 await newCharacter.populate('assetId');
                 migratedCharacters.push(newCharacter);
                 
-                console.log(`✅ Migrated legacy asset "${asset.name}" to character`);
             } catch (migrationError) {
-                console.error(`❌ Failed to migrate asset ${asset._id}:`, migrationError);
+                console.error(`Failed to migrate asset ${asset._id}:`, migrationError);
             }
         }
 
@@ -117,7 +264,6 @@ exports.getUserCampaignCharacters = async (req, res) => {
         characters = [...characters, ...migratedCharacters];
         
         if (migratedCharacters.length > 0) {
-            console.log(`🎉 Successfully migrated ${migratedCharacters.length} additional characters`);
             
             // Clean up legacy tokens that have been migrated to characters
             const migratedAssetIds = migratedCharacters.map(char => char.assetId._id);
@@ -159,7 +305,6 @@ exports.getUserCampaignCharacters = async (req, res) => {
                                     visible: true
                                 });
                                 
-                                console.log(`📍 Migrated legacy token position for character "${migratedCharacter.name}" on map "${map.name}"`);
                             }
                         }
                     }
@@ -173,9 +318,8 @@ exports.getUserCampaignCharacters = async (req, res) => {
                     await map.save();
                 }
                 
-                console.log(`🧹 Processed ${mapsWithLegacyTokens.length} maps and migrated legacy token positions`);
             } catch (cleanupError) {
-                console.error('❌ Error cleaning up legacy tokens:', cleanupError);
+                console.error('Error cleaning up legacy tokens:', cleanupError);
             }
         }
 
@@ -194,8 +338,7 @@ exports.createCharacter = async (req, res) => {
             name, 
             assetId, 
             level = 1, 
-            hitPoints = 0, 
-            maxHitPoints = 0, 
+            hitPoints = { max: 0, current: 0 },
             armorClass = 10,
             defaultSize = { width: 40, height: 40 },
             notes, 
@@ -235,7 +378,6 @@ exports.createCharacter = async (req, res) => {
             assetId,
             level,
             hitPoints,
-            maxHitPoints,
             armorClass,
             defaultSize,
             notes: notes || '',
@@ -260,20 +402,27 @@ exports.updateCharacter = async (req, res) => {
     try {
         const { characterId } = req.params;
         const updates = req.body;
+        
+        console.log('📝 Updating character:', characterId);
+        console.log('📤 Update data received:', JSON.stringify(updates, null, 2));
 
         const character = await Character.findById(characterId);
         if (!character) {
             return res.status(404).json({ message: "Character not found" });
         }
 
-        // Check if user owns this character or is GM
-        const campaign = await Campaign.findById(character.campaignId);
-        if (!campaign) {
-            return res.status(404).json({ message: "Campaign not found" });
-        }
-
-        const isGM = campaign.gm.toString() === req.user._id.toString();
+        // Check if user owns this character or is GM (for campaign characters)
+        let isGM = false;
         const isOwner = character.ownerId.toString() === req.user._id.toString();
+
+        // If character belongs to a campaign, check GM permissions
+        if (character.campaignId) {
+            const campaign = await Campaign.findById(character.campaignId);
+            if (!campaign) {
+                return res.status(404).json({ message: "Campaign not found" });
+            }
+            isGM = campaign.gm.toString() === req.user._id.toString();
+        }
 
         if (!isGM && !isOwner) {
             return res.status(403).json({ message: "You can only update your own characters" });
@@ -281,8 +430,9 @@ exports.updateCharacter = async (req, res) => {
 
         // Filter allowed updates
         const allowedUpdates = [
-            'name', 'assetId', 'level', 'hitPoints', 'maxHitPoints', 'armorClass', 
-            'defaultSize', 'notes', 'properties'
+            'name', 'class', 'race', 'background', 'alignment', 'assetId', 'level', 
+            'hitPoints', 'armorClass', 'speed', 'abilities', 'savingThrows', 'skills',
+            'attacks', 'spells', 'feats', 'inventory', 'defaultSize', 'notes', 'properties'
         ];
         const filteredUpdates = Object.keys(updates)
             .filter(key => allowedUpdates.includes(key))
@@ -291,11 +441,23 @@ exports.updateCharacter = async (req, res) => {
                 return obj;
             }, {});
 
+        console.log('🔍 Filtered updates to apply:', JSON.stringify(filteredUpdates, null, 2));
+        console.log('🔍 Character before update:', JSON.stringify(character.abilities, null, 2));
+        
         Object.assign(character, filteredUpdates);
+        
+        // Apply migration if needed (for old characters or mixed data)
+        migrateCharacterAbilities(character);
+        
         await character.save();
+        
+        console.log('✅ Character saved with abilities:', JSON.stringify(character.abilities, null, 2));
 
         await character.populate('ownerId', 'username');
         await character.populate('assetId');
+        if (character.campaignId) {
+            await character.populate('campaignId', 'name');
+        }
 
         res.json(character);
     } catch (error) {
@@ -314,24 +476,28 @@ exports.deleteCharacter = async (req, res) => {
             return res.status(404).json({ message: "Character not found" });
         }
 
-        // Check if user owns this character or is GM
-        const campaign = await Campaign.findById(character.campaignId);
-        if (!campaign) {
-            return res.status(404).json({ message: "Campaign not found" });
-        }
-
-        const isGM = campaign.gm.toString() === req.user._id.toString();
+        // Check if user owns this character or is GM (for campaign characters)
+        let isGM = false;
         const isOwner = character.ownerId.toString() === req.user._id.toString();
+
+        // If character belongs to a campaign, check GM permissions
+        if (character.campaignId) {
+            const campaign = await Campaign.findById(character.campaignId);
+            if (!campaign) {
+                return res.status(404).json({ message: "Campaign not found" });
+            }
+            isGM = campaign.gm.toString() === req.user._id.toString();
+
+            // Remove character from all maps in the campaign
+            await Map.updateMany(
+                { campaign: character.campaignId },
+                { $pull: { characterInstances: { characterId } } }
+            );
+        }
 
         if (!isGM && !isOwner) {
             return res.status(403).json({ message: "You can only delete your own characters" });
         }
-
-        // Remove character from all maps in the campaign
-        await Map.updateMany(
-            { campaign: character.campaignId },
-            { $pull: { characterInstances: { characterId } } }
-        );
 
         // Delete the character
         await character.deleteOne();

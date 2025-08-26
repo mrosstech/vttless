@@ -78,11 +78,9 @@ class VTTlessIntegration {
             // Show import notification
             this.showNotification(`Importing ${characterData.name} from D&D Beyond...`, 'info');
             
-            // Check if we're on a campaign page
+            // Check if we're on a campaign page (optional now)
             const campaignId = this.extractCampaignId();
-            if (!campaignId) {
-                throw new Error('Please navigate to a campaign to import characters');
-            }
+            console.log('🎯 Campaign context:', campaignId ? `Campaign ${campaignId}` : 'General character import');
 
             // First, let's try to discover available API endpoints
             await this.discoverApiEndpoints();
@@ -98,7 +96,7 @@ class VTTlessIntegration {
                 await this.updateCharacter(existingCharacter._id, vttlessCharacter);
                 this.showNotification(`Updated ${characterData.name} successfully!`, 'success');
             } else {
-                // Create new character
+                // Create new character (campaignId can be null for general characters)
                 const newCharacter = await this.createCharacter(vttlessCharacter, campaignId);
                 this.showNotification(`Created ${characterData.name} successfully!`, 'success');
             }
@@ -126,28 +124,30 @@ class VTTlessIntegration {
      */
     convertToVTTlessFormat(ddbCharacter) {
         console.log('🔄 Converting character format...');
+        console.log('📊 Input D&D Beyond character data:', ddbCharacter);
+        console.log('📊 Abilities being extracted:', ddbCharacter.abilities);
         
-        return {
+        const vttlessData = {
             name: ddbCharacter.name,
+            class: ddbCharacter.class,
+            race: ddbCharacter.race,
+            background: ddbCharacter.background,
             level: ddbCharacter.level || 1,
-            hitPoints: ddbCharacter.hitPoints?.current || 0,
-            maxHitPoints: ddbCharacter.hitPoints?.max || 0,
+            hitPoints: { current: ddbCharacter.hitPoints?.current || 0, max: ddbCharacter.hitPoints?.max || 0 }, 
             armorClass: ddbCharacter.armorClass || 10,
+            speed: ddbCharacter.speed || 30,
+            abilities: ddbCharacter.abilities || {}, // Send abilities at root level for Character model
             
             // Store full D&D Beyond data in properties for future use
             properties: {
                 dndBeyondId: ddbCharacter.characterId,
-                class: ddbCharacter.class,
-                race: ddbCharacter.race,
-                background: ddbCharacter.background,
-                abilities: ddbCharacter.abilities,
+                fullAbilities: ddbCharacter.abilities, // Keep copy in properties too
                 skills: ddbCharacter.skills,
                 savingThrows: ddbCharacter.savingThrows,
                 proficiencies: ddbCharacter.proficiencies,
                 equipment: ddbCharacter.equipment,
                 spells: ddbCharacter.spells,
                 features: ddbCharacter.features,
-                speed: ddbCharacter.speed,
                 avatarUrl: ddbCharacter.avatarUrl,
                 lastImported: new Date().toISOString(),
                 source: 'dndbeyond'
@@ -161,6 +161,9 @@ class VTTlessIntegration {
                 height: 40
             }
         };
+        
+        console.log('📤 Final VTTless data with abilities:', JSON.stringify(vttlessData.abilities, null, 2));
+        return vttlessData;
     }
 
     /**
@@ -256,21 +259,25 @@ class VTTlessIntegration {
      * Get the correct API URL based on current page
      */
     getApiUrl() {
-        const currentUrl = window.location.href;
-        
-        // If we're on localhost:3000 (frontend), API is on localhost:3001
-        if (currentUrl.includes('localhost:3000')) {
+        // In development, always use localhost:3001 for API
+        // Check if we're in development by looking for localhost in any tabs or common dev indicators
+        if (this.isDevelopmentMode()) {
             return 'http://localhost:3001';
         }
         
-        // If we're on localhost:3001 (API server), use same origin
-        if (currentUrl.includes('localhost:3001')) {
-            return 'http://localhost:3001';
-        }
-        
-        // For production, assume API is same origin
-        const url = new URL(currentUrl);
-        return `${url.protocol}//${url.host}`;
+        // For production, assume API is same origin as VTTless frontend
+        // This would be configured differently in a real production environment
+        return 'https://your-vttless-domain.com';
+    }
+
+    /**
+     * Check if we're running in development mode
+     */
+    isDevelopmentMode() {
+        // Since extension runs on D&D Beyond, we need to detect dev mode differently
+        // In dev, we assume the API is always on localhost:3001
+        // This could be made more sophisticated with extension storage or manifest checking
+        return true; // For now, always assume development mode
     }
 
     /**
@@ -308,7 +315,10 @@ class VTTlessIntegration {
             // Use the correct VTTless API endpoint for fetching user's characters
             // If we're on port 3000 (frontend), API calls need to go to port 3001 (backend)
             const apiUrl = this.getApiUrl();
-            const endpoint = `${apiUrl}/campaigns/${campaignId}/characters/user`;
+            // Use general endpoint if no campaign context, otherwise use campaign-specific endpoint
+            const endpoint = campaignId 
+                ? `${apiUrl}/campaigns/${campaignId}/characters/user`
+                : `${apiUrl}/characters`;
             
             console.log(`🔍 Fetching user's characters from: ${endpoint}`);
             const response = await fetch(endpoint, {
@@ -350,24 +360,32 @@ class VTTlessIntegration {
         let assetId = await this.getOrCreateCharacterAsset(characterData);
         
         if (!assetId) {
-            throw new Error('Character creation requires an asset (character image). Please upload a character image to VTTless first.');
+            console.log('⚠️ No asset found, creating character without image');
+            assetId = null; // Allow character creation without asset
         }
 
         const apiUrl = this.getApiUrl();
-        const endpoint = `${apiUrl}/campaigns/${campaignId}/characters`;
+        // Use general endpoint if no campaign context, otherwise use campaign-specific endpoint
+        const endpoint = campaignId 
+            ? `${apiUrl}/campaigns/${campaignId}/characters`
+            : `${apiUrl}/characters`;
         
         // Prepare the payload according to VTTless API specification
         const payload = {
             name: characterData.name,
             assetId: assetId,
             level: characterData.level || 1,
-            hitPoints: characterData.hitPoints || 0,
-            maxHitPoints: characterData.maxHitPoints || 0,
+            hitPoints: {current: characterData.hitPoints || 0, max: characterData.maxHitPoints || 0},
             armorClass: characterData.armorClass || 10,
             defaultSize: characterData.defaultSize || { width: 40, height: 40 },
             notes: characterData.notes || '',
             properties: characterData.properties || {}
         };
+        
+        // Add campaignId to payload if using general endpoint
+        if (campaignId && endpoint.includes('/characters') && !endpoint.includes('/campaigns/')) {
+            payload.campaignId = campaignId;
+        }
 
         console.log(`🔍 Creating character at: ${endpoint}`);
         console.log('📦 Payload:', payload);
@@ -404,8 +422,13 @@ class VTTlessIntegration {
      */
     async updateCharacter(characterId, characterData) {
         console.log('📝 Updating existing character in VTTless...');
+        console.log('📤 Character data being sent:', JSON.stringify(characterData, null, 2));
         
-        const response = await fetch(`/characters/${characterId}`, {
+        const apiUrl = this.getApiUrl();
+        const endpoint = `${apiUrl}/characters/${characterId}`;
+        console.log(`🔍 Updating character at: ${endpoint}`);
+        
+        const response = await fetch(endpoint, {
             method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json'

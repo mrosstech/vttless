@@ -127,6 +127,7 @@ const MenuToggle = ({ toggle, isOpen }) => {
         >
           <MenuItem to="/">Home</MenuItem>
           <MenuItem to="/campaigns">Campaigns</MenuItem>
+          <MenuItem to="/characters">My Characters</MenuItem>
           <MenuItem to="/friends">Friends</MenuItem>
           { user ? 
               <>

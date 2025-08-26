@@ -564,8 +564,7 @@ const Play = () => {
                 name: characterName,
                 assetId,
                 level: 1,
-                hitPoints: 10,
-                maxHitPoints: 10,
+                hitPoints: {max: 10, current: 10},
                 armorClass: 10,
                 defaultSize: {
                     width: gridSettings.gridSize,

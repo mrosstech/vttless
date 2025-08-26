@@ -9,7 +9,6 @@ const s3 = new AWS.S3({
 });
 
 exports.getUploadUrl = async (req, res) => {
-    console.log('getUploadUrl called');
     try {
         const { fileName, fileType, assetType, campaignId } = req.body;
         
@@ -47,7 +46,6 @@ exports.getUploadUrl = async (req, res) => {
 };
 
 exports.confirmUpload = async (req, res) => {
-    console.log('confirmUpload called');
     try {
         const { assetId } = req.body;
         
@@ -66,7 +64,6 @@ exports.confirmUpload = async (req, res) => {
 };
 
 exports.getDownloadUrl = async (req, res) => {
-    console.log('getDownloadUrl called');
     try {
         const { id: assetId } = req.params;
         
@@ -90,7 +87,6 @@ exports.getDownloadUrl = async (req, res) => {
 };
 
 exports.getCampaignAssets = async (req, res) => {
-    console.log('getCampaignAssets called');
     try {
         const { campaignId } = req.params;
         

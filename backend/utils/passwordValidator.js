@@ -26,7 +26,6 @@ const passwordValidator = {
         if (this.containsPersonalInfo(password, email, username)) {
             errors.push('Password cannot contain parts of your email or username');
         }
-        console.log(errors);
         return {
             isValid: errors.length === 0,
             errors,

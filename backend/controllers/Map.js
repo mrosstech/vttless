@@ -342,7 +342,6 @@ exports.analyzeMap = async (req, res) => {
             });
         }
 
-        console.log("Analyzing map image:", req.file.path);
         const analysisResult = await analyzeMapImage(req.file.path);
         
         // Add suggestions based on analysis

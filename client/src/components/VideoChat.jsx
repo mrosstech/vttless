@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
+import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import {
     Box,
     VStack,
@@ -8,10 +8,7 @@ import {
     IconButton,
     Card,
     CardBody,
-    useToast,
-    Switch,
-    FormControl,
-    FormLabel
+    useToast
 } from '@chakra-ui/react';
 import { FaVideo, FaVideoSlash, FaMicrophone, FaMicrophoneSlash, FaPhoneSlash } from 'react-icons/fa';
 import Peer from 'simple-peer';
@@ -52,39 +49,8 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
     const lastOfferReceived = useRef({}); // Track last offer time per user
     const toast = useToast();
 
-    // Initialize local media stream with fixed quality to prevent disconnections
-    const initializeLocalStream = useCallback(async () => {
-        try {
-            // Use consistent video quality to prevent peer connection drops
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { width: 320, height: 240, frameRate: 30 },
-                audio: true
-            });
-            
-            setLocalStream(stream);
-            if (localVideoRef.current) {
-                localVideoRef.current.srcObject = stream;
-            }
-
-            toast({
-                title: "Camera and microphone ready",
-                status: "success",
-                duration: 2000
-            });
-        } catch (error) {
-            console.error('Error accessing media devices:', error);
-            toast({
-                title: "Media access denied",
-                description: "Please allow camera and microphone access to use video chat",
-                status: "error",
-                duration: 5000
-            });
-        }
-    }, [toast]);
-
-    // Create peer connection for new user with improved error handling
+    // Create peer connection for new user
     const createPeer = useCallback((userToSignal, stream, isInitiator) => {
-        console.log(`🔗 Creating peer connection: ${userId} ${isInitiator ? '→' : '←'} ${userToSignal}`);
         
         const peer = new Peer({
             initiator: isInitiator,
@@ -100,7 +66,6 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
 
         peer.on('signal', signal => {
             const eventName = isInitiator ? 'webrtc-offer' : 'webrtc-answer';
-            console.log(`📡 Sending ${eventName} from ${userId} to ${userToSignal}`);
             
             socket.emit(eventName, {
                 campaignId,
@@ -112,8 +77,6 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
         });
 
         peer.on('stream', remoteStream => {
-            console.log(`🎥 Received stream from ${userToSignal}`);
-            
             // Update both refs and state atomically
             const userName = peersRef.current[userToSignal]?.userName || 'Unknown';
             
@@ -130,7 +93,6 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
         });
 
         peer.on('connect', () => {
-            console.log(`✅ Peer connected: ${userToSignal}`);
             setPeers(prevPeers => ({
                 ...prevPeers,
                 [userToSignal]: {
@@ -141,7 +103,6 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
         });
 
         peer.on('close', () => {
-            console.log(`📴 Peer connection closed: ${userToSignal}`);
             setPeers(prevPeers => {
                 const newPeers = { ...prevPeers };
                 delete newPeers[userToSignal];
@@ -151,7 +112,7 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
         });
 
         peer.on('error', error => {
-            console.error(`❌ Peer connection error with ${userToSignal}:`, error);
+            console.error(`Peer connection error with ${userToSignal}:`, error);
             
             // Clean up failed connection
             setPeers(prevPeers => {
@@ -172,17 +133,14 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
         return peer;
     }, [socket, campaignId, userId, userName, toast]);
 
-    // Join video call with improved connection handling
+    // Join video call
     const joinCall = useCallback(async () => {
-        console.log(`🚀 ${userName} (${userId}) attempting to join video call...`);
         
         try {
             let stream = localStream;
             
             // Initialize local stream if it doesn't exist
             if (!stream) {
-                console.log('🎥 Initializing media stream...');
-                
                 stream = await navigator.mediaDevices.getUserMedia({
                     video: { width: 320, height: 240, frameRate: 30 },
                     audio: true
@@ -193,7 +151,6 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                     localVideoRef.current.srcObject = stream;
                 }
 
-                console.log('✅ Media stream initialized');
                 toast({
                     title: "Camera and microphone ready",
                     status: "success",
@@ -206,7 +163,6 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
             
             // Ensure socket is connected before emitting
             if (!socket.connected) {
-                console.log('🔌 Connecting socket...');
                 socket.connect();
                 await new Promise((resolve, reject) => {
                     const timeout = setTimeout(() => {
@@ -235,12 +191,10 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
             setPeers({});
             
             // Re-join campaign to ensure we're in the right room
-            console.log(`🏠 Joining campaign room: ${campaignId}`);
-            socket.emit('joinCampaign', campaignId);
+            socket.emit('joinCampaign', campaignId, userId);
             
             // Wait a bit for the join to complete, then announce video join
             setTimeout(() => {
-                console.log(`📢 Announcing video join for ${userName}`);
                 socket.emit('user-joined-video', {
                     campaignId,
                     userId,
@@ -254,7 +208,7 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                 duration: 2000
             });
         } catch (error) {
-            console.error('❌ Error joining call:', error);
+            console.error('Error joining call:', error);
             setIsInCall(false);
             toast({
                 title: "Failed to join call",
@@ -382,17 +336,14 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
         }
 
         const handleUserJoinedVideo = ({ userId: joinedUserId, userName: joinedUserName }) => {
-            console.log(`👤 User joined video: ${joinedUserName} (${joinedUserId})`);
             if (joinedUserId === userId) return; // Don't connect to self
 
             // Prevent duplicate connections
             if (peersRef.current[joinedUserId]) {
-                console.log(`⚠️ Peer ${joinedUserId} already exists, skipping`);
                 return;
             }
 
             if (localStream) {
-                console.log(`🔄 Creating initiator connection to ${joinedUserName}`);
                 const peer = createPeer(joinedUserId, localStream, true);
                 peersRef.current[joinedUserId] = { 
                     peer, 
@@ -410,20 +361,16 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                         connected: false
                     }
                 }));
-            } else {
-                console.warn(`❌ No local stream available for connection to ${joinedUserName}`);
             }
         };
 
         const handleWebRTCOffer = ({ fromUserId, signal, userName: fromUserName }) => {
-            console.log(`📩 Received WebRTC offer from ${fromUserName} (${fromUserId})`);
             if (fromUserId === userId) return; // Ignore own offers
             
             // Debounce rapid offers from the same user
             const now = Date.now();
             const lastOffer = lastOfferReceived.current[fromUserId];
             if (lastOffer && (now - lastOffer) < 500) { // Ignore offers within 500ms
-                console.log(`🚫 Debouncing rapid offer from ${fromUserId} (${now - lastOffer}ms ago)`);
                 return;
             }
             lastOfferReceived.current[fromUserId] = now;
@@ -434,7 +381,6 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                 
                 // Check if peer is valid and not destroyed
                 if (!existingPeer || existingPeer.destroyed) {
-                    console.log(`🧹 Cleaning up destroyed peer ${fromUserId}`);
                     delete peersRef.current[fromUserId];
                     setPeers(prevPeers => {
                         const newPeers = { ...prevPeers };
@@ -446,16 +392,12 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                     const peerData = peersRef.current[fromUserId];
                     const isNewlyCreated = peerData.createdAt && (Date.now() - peerData.createdAt) < 1000; // Less than 1 second old
                     
-                    console.log(`⚠️ Peer ${fromUserId} already exists with state: ${signalingState || 'unknown'} (age: ${peerData.createdAt ? Date.now() - peerData.createdAt : 'unknown'}ms)`);
-                    
                     // If peer is newly created and state is undefined, allow some time for initialization
                     if (!signalingState && isNewlyCreated) {
-                        console.log(`⏳ Newly created peer ${fromUserId}, allowing initialization time`);
                         // Try to signal it anyway, as it might be ready
                         try {
                             existingPeer.signal(signal);
                         } catch (error) {
-                            console.error(`❌ Error signaling newly created peer ${fromUserId}:`, error);
                             // If it fails, recreate it
                             try {
                                 existingPeer.removeAllListeners();
@@ -473,9 +415,8 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                         return;
                     }
                     
-                    // If signalingState is undefined for an older peer, or peer is in problematic state, recreate
-                    if ((!signalingState && !isNewlyCreated) || signalingState === 'stable' || signalingState === 'closed') {
-                        console.log(`🔄 Recreating peer connection for ${fromUserId} (state: ${signalingState || 'undefined'}, age: ${peerData.createdAt ? Date.now() - peerData.createdAt : 'unknown'}ms)`);
+                    // Only recreate if peer is in problematic state (closed), not for unknown state
+                    if (signalingState === 'closed') {
                         
                         // Clean up the existing peer connection
                         try {
@@ -493,17 +434,40 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                             return newPeers;
                         });
                     } else if (signalingState === 'have-local-offer') {
-                        // We already sent an offer, let the other side handle our offer instead
-                        console.log(`⏭️ Ignoring offer from ${fromUserId}, we already sent an offer (avoiding glare)`);
+                        // Handle offer collision using user ID comparison for deterministic resolution
+                        if (userId < fromUserId) {
+                            // Our user ID is lower, we win - ignore their offer
+                            return;
+                        } else {
+                            // Their user ID is lower, they win - restart our connection
+                            try {
+                                existingPeer.removeAllListeners();
+                                existingPeer.destroy();
+                            } catch (error) {
+                                console.warn('Error destroying peer during collision resolution:', error);
+                            }
+                            delete peersRef.current[fromUserId];
+                            setPeers(prevPeers => {
+                                const newPeers = { ...prevPeers };
+                                delete newPeers[fromUserId];
+                                return newPeers;
+                            });
+                            // Will create new peer below
+                        }
+                    } else if (signalingState === 'stable') {
+                        // Peer is already connected, ignore the offer to avoid disrupting existing connection
                         return;
                     } else {
-                        // Peer is in a state where it can handle the offer
-                        console.log(`📡 Signaling existing peer ${fromUserId} in state: ${signalingState}`);
+                        // Peer is in some other state - try to signal if not stable
                         try {
                             existingPeer.signal(signal);
                         } catch (error) {
-                            console.error(`❌ Error signaling existing peer ${fromUserId}:`, error);
-                            // If signaling fails, recreate the peer
+                            // If it's an InvalidStateError and peer is already stable, just ignore
+                            if (error.name === 'InvalidStateError' && error.message.includes('stable')) {
+                                return;
+                            }
+                            
+                            // For other errors, recreate the peer
                             try {
                                 existingPeer.removeAllListeners();
                                 existingPeer.destroy();
@@ -524,7 +488,6 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
 
             // Create new peer connection if no existing peer or existing peer was cleaned up
             if (localStream && !peersRef.current[fromUserId]) {
-                console.log(`🔄 Creating receiver connection from ${fromUserName}`);
                 const peer = createPeer(fromUserId, localStream, false);
                 peersRef.current[fromUserId] = { 
                     peer, 
@@ -546,7 +509,6 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                 try {
                     peer.signal(signal);
                 } catch (error) {
-                    console.error(`❌ Error signaling new peer ${fromUserId}:`, error);
                     // Clean up failed peer
                     delete peersRef.current[fromUserId];
                     setPeers(prevPeers => {
@@ -555,20 +517,15 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                         return newPeers;
                     });
                 }
-            } else if (!localStream) {
-                console.warn(`❌ No local stream available for offer from ${fromUserName}`);
             }
         };
 
         const handleWebRTCAnswer = ({ fromUserId, signal }) => {
-            console.log(`📨 Received WebRTC answer from ${fromUserId}`);
-            
             if (peersRef.current[fromUserId]) {
                 const existingPeer = peersRef.current[fromUserId].peer;
                 
                 // Check if peer is valid and not destroyed
                 if (!existingPeer || existingPeer.destroyed) {
-                    console.warn(`⚠️ Received answer for destroyed/invalid peer ${fromUserId}`);
                     delete peersRef.current[fromUserId];
                     setPeers(prevPeers => {
                         const newPeers = { ...prevPeers };
@@ -579,21 +536,18 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                 }
                 
                 const signalingState = existingPeer.signalingState;
-                const peerData = peersRef.current[fromUserId];
-                const isNewlyCreated = peerData.createdAt && (Date.now() - peerData.createdAt) < 2000; // Less than 2 seconds old
                 
-                console.log(`📡 Processing answer from ${fromUserId} (peer state: ${signalingState || 'unknown'}, age: ${peerData.createdAt ? Date.now() - peerData.createdAt : 'unknown'}ms)`);
-                
-                // Process answer if peer is in correct state OR if it's newly created (signaling state might not be ready yet)
-                if (signalingState === 'have-local-offer' || (!signalingState && isNewlyCreated)) {
+                // Process answer if peer is expecting one OR if state is unknown (simple-peer doesn't always expose signalingState)
+                if (signalingState === 'have-local-offer' || !signalingState) {
                     try {
                         existingPeer.signal(signal);
-                        if (!signalingState && isNewlyCreated) {
-                            console.log(`✅ Successfully processed answer for newly created peer ${fromUserId}`);
-                        }
                     } catch (error) {
-                        console.error(`❌ Error processing answer from ${fromUserId}:`, error);
-                        // Clean up failed peer connection
+                        // If it's an InvalidStateError and peer is already stable, ignore it
+                        if (error.name === 'InvalidStateError' && error.message.includes('stable')) {
+                            return;
+                        }
+                        
+                        // For other errors, clean up failed peer connection
                         try {
                             existingPeer.removeAllListeners();
                             existingPeer.destroy();
@@ -607,23 +561,16 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                             return newPeers;
                         });
                     }
-                } else {
-                    console.warn(`⚠️ Received answer from ${fromUserId} but peer is in wrong state: ${signalingState || 'unknown'} (age: ${peerData.createdAt ? Date.now() - peerData.createdAt : 'unknown'}ms)`);
                 }
-            } else {
-                console.warn(`⚠️ Received answer from unknown peer ${fromUserId}`);
             }
         };
 
         const handleWebRTCIceCandidate = ({ fromUserId, signal }) => {
-            // Don't log every ICE candidate to reduce console noise
-            
             if (peersRef.current[fromUserId]) {
                 const existingPeer = peersRef.current[fromUserId].peer;
                 
                 // Check if peer is valid first
                 if (!existingPeer) {
-                    console.warn(`⚠️ Received ICE candidate for invalid peer ${fromUserId}`);
                     delete peersRef.current[fromUserId];
                     setPeers(prevPeers => {
                         const newPeers = { ...prevPeers };
@@ -638,14 +585,9 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
                     try {
                         existingPeer.signal(signal);
                     } catch (error) {
-                        console.error(`❌ Error processing ICE candidate from ${fromUserId}:`, error);
                         // Don't destroy peer for ICE candidate errors, they're less critical
                     }
-                } else {
-                    console.warn(`⚠️ Received ICE candidate for ${existingPeer.destroyed ? 'destroyed' : 'closed'} peer ${fromUserId}`);
                 }
-            } else {
-                console.warn(`⚠️ Received ICE candidate from unknown peer ${fromUserId}`);
             }
         };
 
@@ -675,6 +617,7 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
             socket.off('user-left-video', handleUserLeftVideo);
         };
     }, [socket, isInCall, userId, localStream, createPeer]);
+
 
     // Update video element when local stream changes
     useEffect(() => {
@@ -727,7 +670,6 @@ const VideoChat = ({ socket, campaignId, userId, userName, campaign, isOpen, isR
         // Check if user was previously in a call (persist call state)
         const wasInCall = localStorage.getItem(`videoCall_${campaignId}_${userId}`);
         if (wasInCall === 'true' && campaign && !isInCall) {
-            console.log('🔄 Detected previous video call session, attempting to rejoin...');
             // Auto-rejoin after a short delay to let everything initialize
             setTimeout(() => {
                 if (!isInCall) { // Double check we're not already joining

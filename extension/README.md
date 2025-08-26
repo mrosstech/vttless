@@ -158,8 +158,7 @@ The extension converts D&D Beyond character data to VTTless format:
 {
   name: "Character Name",
   level: 5,
-  hitPoints: 45,
-  maxHitPoints: 45,
+  hitPoints: {max: 45, current: 45},
   armorClass: 16,
   properties: {
     dndBeyondId: "12345",

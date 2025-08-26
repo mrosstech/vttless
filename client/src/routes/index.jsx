@@ -7,6 +7,7 @@ import Logout from "../components/Logout.jsx";
 import Signup from "../components/Signup.jsx";
 import ImprovedFriends from "../components/ImprovedFriends";
 import Campaigns from "../components/Campaigns";
+import Characters from "../components/Characters";
 import NavBar from '../components/Navbar';
 import Play from '../components/Play.jsx';
 import Profile from '../components/Profile';
@@ -44,6 +45,10 @@ const Routes = () => {
                         {
                             path: "/campaigns",
                             element: <Campaigns />
+                        },
+                        {
+                            path: "/characters",
+                            element: <Characters />
                         },
                         {
                             path: "/friends",

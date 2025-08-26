@@ -53,31 +53,26 @@ class DNDBeyondIntegration {
      */
     injectIntegrationUI() {
         try {
-            // Find a good place to inject our UI (character header area)
-            const headerSelectors = [
-                '.ddbc-character-tidbits',
-                '.character-tidbits-box',
-                '.ddbc-character-header'
-            ];
-
-            let headerElement = null;
-            for (const selector of headerSelectors) {
-                headerElement = document.querySelector(selector);
-                if (headerElement) break;
-            }
-
-            if (!headerElement) {
-                console.log('❌ Could not find header element to inject UI');
+            // Find the character header desktop area
+            const headerDesktop = document.querySelector('.ct-character-header-desktop');
+            
+            if (!headerDesktop) {
+                console.log('❌ Could not find character header desktop element');
                 return;
             }
 
-            // Create VTTless integration panel
-            const integrationPanel = this.createIntegrationPanel();
+            // Create VTTless integration button group and insert before the builder group
+            const builderGroup = headerDesktop.querySelector('.ct-character-header-desktop__group--builder');
+            const vttlessGroup = this.createCompactIntegrationButton();
             
-            // Insert the panel after the header
-            headerElement.parentNode.insertBefore(integrationPanel, headerElement.nextSibling);
+            if (builderGroup) {
+                headerDesktop.insertBefore(vttlessGroup, builderGroup);
+            } else {
+                // Fallback: append to end of header desktop
+                headerDesktop.appendChild(vttlessGroup);
+            }
             
-            console.log('✅ VTTless integration UI injected successfully');
+            console.log('✅ VTTless integration button injected successfully');
             
         } catch (error) {
             console.error('❌ Error injecting integration UI:', error);
@@ -85,20 +80,81 @@ class DNDBeyondIntegration {
     }
 
     /**
-     * Create the VTTless integration panel
+     * Create a compact VTTless integration button similar to Share button
      */
-    createIntegrationPanel() {
+    createCompactIntegrationButton() {
+        // Create the button group container
+        const group = document.createElement('div');
+        group.className = 'ct-character-header-desktop__group ct-character-header-desktop__group--vttless';
+        
+        // Create the button container
+        const buttonContainer = document.createElement('div');
+        buttonContainer.className = 'ct-character-header-desktop__button';
+        buttonContainer.setAttribute('role', 'button');
+        buttonContainer.setAttribute('tabindex', '0');
+        buttonContainer.style.cursor = 'pointer';
+        buttonContainer.style.position = 'relative';
+        
+        // Create the VTTless icon (SVG similar to share icon style)
+        const iconContainer = document.createElement('div');
+        iconContainer.className = 'ct-character-header-desktop__button-icon';
+        
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        svg.setAttribute('viewBox', '0 0 50 50');
+        svg.setAttribute('class', 'ddbc-svg ddbc-vttless-svg ddbc-svg--themed');
+        
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('fill', '#C53131');
+        path.setAttribute('d', 'M25,5 C30,5 35,8 38,13 L45,13 C47,13 47,17 45,17 L38,17 C35,22 30,25 25,25 C20,25 15,22 12,17 L5,17 C3,17 3,13 5,13 L12,13 C15,8 20,5 25,5 Z M25,8 C21.5,8 18.5,10.5 18.5,14 C18.5,17.5 21.5,20 25,20 C28.5,20 31.5,17.5 31.5,14 C31.5,10.5 28.5,8 25,8 Z M25,11 C26.5,11 28,12 28,14 C28,16 26.5,17 25,17 C23.5,17 22,16 22,14 C22,12 23.5,11 25,11 Z M15,30 L35,30 C37,30 37,34 35,34 L15,34 C13,34 13,30 15,30 Z M10,38 L40,38 C42,38 42,42 40,42 L10,42 C8,42 8,38 10,38 Z');
+        
+        svg.appendChild(path);
+        iconContainer.appendChild(svg);
+        
+        // Create the button label
+        const label = document.createElement('span');
+        label.className = 'ct-character-header-desktop__button-label';
+        label.textContent = 'Sync';
+        
+        // Assemble the button
+        buttonContainer.appendChild(iconContainer);
+        buttonContainer.appendChild(label);
+        
+        // Create the hover panel (initially hidden)
+        const hoverPanel = this.createHoverPanel();
+        buttonContainer.appendChild(hoverPanel);
+        
+        group.appendChild(buttonContainer);
+        
+        // Add event listeners
+        this.setupCompactButtonEvents(buttonContainer, hoverPanel);
+        
+        return group;
+    }
+    
+    /**
+     * Create the hover panel with full controls
+     */
+    createHoverPanel() {
         const panel = document.createElement('div');
-        panel.className = 'vttless-integration-panel';
+        panel.className = 'vttless-hover-panel';
         panel.style.cssText = `
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-top: 8px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             border: 2px solid #4f46e5;
             border-radius: 12px;
             padding: 16px;
-            margin: 16px 0;
             color: white;
             font-family: Arial, sans-serif;
-            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+            box-shadow: 0 4px 20px rgba(79, 70, 229, 0.4);
+            width: 320px;
+            z-index: 1000;
+            display: none;
+            pointer-events: auto;
         `;
 
         panel.innerHTML = `
@@ -107,20 +163,20 @@ class DNDBeyondIntegration {
                     <div style="width: 24px; height: 24px; background: white; border-radius: 4px; margin-right: 8px; display: flex; align-items: center; justify-content: center;">
                         🎲
                     </div>
-                    <h3 style="margin: 0; font-size: 18px; font-weight: bold;">VTTless Integration</h3>
+                    <h3 style="margin: 0; font-size: 16px; font-weight: bold;">VTTless Integration</h3>
                 </div>
-                <div id="vttless-connection-status" style="padding: 4px 8px; border-radius: 4px; background: rgba(255,255,255,0.2); font-size: 12px;">
-                    Checking connection...
+                <div id="vttless-connection-status" style="padding: 4px 8px; border-radius: 4px; background: rgba(255,255,255,0.2); font-size: 11px;">
+                    Ready
                 </div>
             </div>
             
             <div style="margin-bottom: 12px;">
-                <p style="margin: 0 0 8px 0; font-size: 14px; opacity: 0.9;">
+                <p style="margin: 0 0 8px 0; font-size: 13px; opacity: 0.9; line-height: 1.3;">
                     Sync your D&D Beyond character with VTTless for seamless virtual tabletop gaming.
                 </p>
             </div>
             
-            <div style="display: flex; gap: 8px; align-items: center;">
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                 <button id="vttless-sync-character" style="
                     background: rgba(255,255,255,0.2);
                     border: 1px solid rgba(255,255,255,0.3);
@@ -129,6 +185,7 @@ class DNDBeyondIntegration {
                     border-radius: 6px;
                     cursor: pointer;
                     font-weight: bold;
+                    font-size: 12px;
                     transition: all 0.2s;
                 " onmouseover="this.style.background='rgba(255,255,255,0.3)'" 
                    onmouseout="this.style.background='rgba(255,255,255,0.2)'">
@@ -142,20 +199,66 @@ class DNDBeyondIntegration {
                     padding: 8px 12px;
                     border-radius: 6px;
                     cursor: pointer;
-                    font-size: 12px;
+                    font-size: 11px;
                     transition: all 0.2s;
                 " onmouseover="this.style.background='rgba(255,255,255,0.2)'" 
                    onmouseout="this.style.background='rgba(255,255,255,0.1)'">
                     Auto-sync: OFF
                 </button>
-                
-                <div id="vttless-sync-status" style="flex: 1; text-align: right; font-size: 12px; opacity: 0.8;">
-                    Ready to sync
-                </div>
+            </div>
+            
+            <div id="vttless-sync-status" style="text-align: center; font-size: 11px; opacity: 0.8; margin-top: 8px;">
+                Ready to sync
             </div>
         `;
 
         return panel;
+    }
+    
+    /**
+     * Setup events for the compact button
+     */
+    setupCompactButtonEvents(button, panel) {
+        let hoverTimeout;
+        let isHovering = false;
+        
+        // Show panel on hover
+        button.addEventListener('mouseenter', () => {
+            isHovering = true;
+            clearTimeout(hoverTimeout);
+            panel.style.display = 'block';
+        });
+        
+        // Hide panel when leaving button area
+        button.addEventListener('mouseleave', () => {
+            isHovering = false;
+            hoverTimeout = setTimeout(() => {
+                if (!isHovering) {
+                    panel.style.display = 'none';
+                }
+            }, 300); // Small delay to allow moving to panel
+        });
+        
+        // Keep panel open when hovering over it
+        panel.addEventListener('mouseenter', () => {
+            isHovering = true;
+            clearTimeout(hoverTimeout);
+        });
+        
+        panel.addEventListener('mouseleave', () => {
+            isHovering = false;
+            hoverTimeout = setTimeout(() => {
+                panel.style.display = 'none';
+            }, 300);
+        });
+        
+        // Quick sync on click
+        button.addEventListener('click', (e) => {
+            if (e.target.closest('#vttless-sync-character, #vttless-auto-sync-toggle')) {
+                return; // Don't trigger quick sync if clicking on panel buttons
+            }
+            this.syncCharacter();
+        });
     }
 
     /**
@@ -340,7 +443,7 @@ class DNDBeyondIntegration {
     /**
      * Handle messages from popup or background script
      */
-    handleMessage(message, sender, sendResponse) {
+    handleMessage(message, _sender, sendResponse) {
         console.log('📨 Received message:', message);
         
         switch (message.action) {

@@ -17,7 +17,6 @@ exports.signup = async (req, res) => {
                 }
             });
         }
-        console.log("New user request!  Username: " + username);
         // Ensure that the username and email don't already exist
         const existingEmail = await User.findOne({ email });
         if (existingEmail) {
@@ -35,16 +34,14 @@ exports.signup = async (req, res) => {
         if (!userRole) {
             userRole = new Role({ name: "User" });
             await userRole.save();
-            console.log("Created User role");
         }
         
-        console.log(userRole);
         const newUser = new User({
             email, username, password, roles: [userRole._id]
         });
 
         await newUser.save().catch(function(err) {
-            console.log(err);
+            console.error(err);
         });
 
         // Check to see if the new user has an e-mail address associated with any
